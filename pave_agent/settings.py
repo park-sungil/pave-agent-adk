@@ -17,9 +17,6 @@ ORACLE_DSN: str = os.getenv("ORACLE_DSN", "localhost:1521/pavedb")
 ORACLE_USER: str = os.getenv("ORACLE_USER", "pave")
 ORACLE_PASSWORD: str = os.getenv("ORACLE_PASSWORD", "")
 
-# ChromaDB
-CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_data")
-
 # Paths
 PROJECT_ROOT: Path = Path(__file__).parent
 SKILLS_DIR: Path = PROJECT_ROOT / "skills"

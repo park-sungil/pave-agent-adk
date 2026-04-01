@@ -1,7 +1,7 @@
 """interpret tool: Domain-knowledge-based interpretation of data/analysis results.
 
 Combines static Domain Skill rules with dynamic RAG retrieval
-to provide semiconductor domain-specific interpretation.
+to provide domain-specific interpretation.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from typing import Any
 
 import litellm
 
-from pave_lib import settings
-from pave_lib.rag import retriever
+from pave_agent import settings
+from pave_agent.rag import retriever
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ _DOMAIN_SKILL: str = ""
 if _DOMAIN_SKILL_PATH.exists():
     _DOMAIN_SKILL = _DOMAIN_SKILL_PATH.read_text(encoding="utf-8")
 
-_INTERPRET_PROMPT = """당신은 반도체 PPA 데이터를 해석하는 도메인 전문가입니다.
+_INTERPRET_PROMPT = """당신은 도메인 전문가입니다.
 아래의 도메인 규칙과 참조 문서를 바탕으로, 주어진 데이터/분석 결과를 해석하세요.
 
 ## 도메인 규칙 (항상 적용)
@@ -55,16 +55,15 @@ def interpret(
 ) -> str:
     """데이터/분석 결과를 도메인 맥락에서 해석한다.
 
-    Domain Skill(정적 규칙)과 RAG(동적 문서 검색)를 결합하여
-    반도체 전문가 관점의 해석을 생성한다.
+    Domain Skill(정적 규칙)과 RAG(동적 문서 검색)를 결합하여 해석을 생성한다.
 
     Args:
-        data: query_data 조회 결과 또는 analyze 분석 결과.
-        question: 사용자의 원래 질문 또는 해석 맥락.
+        data: 조회 결과 또는 분석 결과.
+        question: 사용자의 질문 또는 해석 맥락.
         context: 추가 맥락 정보 (선택).
 
     Returns:
-        도메인 맥락의 해석 텍스트 (한국어).
+        도메인 해석 텍스트.
     """
     # Prepare data summary
     if isinstance(data, list):
@@ -86,10 +85,13 @@ def interpret(
     )
 
     try:
+        llm_kwargs: dict = {"model": settings.LLM_MODEL}
+        if settings.LLM_API_BASE:
+            llm_kwargs["api_base"] = settings.LLM_API_BASE
+        if settings.LLM_API_KEY:
+            llm_kwargs["api_key"] = settings.LLM_API_KEY
         response = litellm.completion(
-            model=settings.LLM_MODEL,
-            api_base=settings.LLM_API_BASE,
-            api_key=settings.LLM_API_KEY or None,
+            **llm_kwargs,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=4096,

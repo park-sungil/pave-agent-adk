@@ -1,0 +1,5 @@
+- [Use cases](project_usecases.md) — 5가지 사용 목적과 질문 예시. 우선순위: 데이터 조회 + 벤치마킹 먼저.
+- [Feedback: simplicity](feedback_simplicity.md) — langgraph 복잡성을 그대로 가져오지 말 것. 최소 기능부터 점진적 확장.
+- [Process node mapping](project_node_mapping.md) — 2nm→SF2/SF2P/SF2PP, 3nm→SF3. DB에 없는 매핑.
+- [Query pattern rules](feedback_query_patterns.md) — 질문 패턴 규칙. 전체 데이터 반환 시 기본 조건 미정(TODO).
+- [TODO list](project_todo.md) — 미결정 사항 + 다음 작업 목록.

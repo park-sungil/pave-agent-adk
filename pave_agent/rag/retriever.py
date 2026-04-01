@@ -1,8 +1,13 @@
-"""RAG retriever: searches vector store and formats results for LLM context."""
+"""RAG retriever: fetches relevant documents from external RAG API."""
 
 from __future__ import annotations
 
-from pave_lib.db import vector_store
+import logging
+
+logger = logging.getLogger(__name__)
+
+# TODO: Replace with actual internal RAG API endpoint
+_RAG_API_URL: str = ""
 
 
 def retrieve(query: str, top_k: int = 5) -> str:
@@ -15,14 +20,11 @@ def retrieve(query: str, top_k: int = 5) -> str:
     Returns:
         Formatted string of retrieved document chunks for LLM context.
     """
-    results = vector_store.search(query, n_results=top_k)
-
-    if not results:
+    if not _RAG_API_URL:
         return "(관련 참조 문서가 없습니다.)"
 
-    chunks = []
-    for i, doc in enumerate(results, 1):
-        source = doc["metadata"].get("source", "unknown")
-        chunks.append(f"[참조 {i}] (출처: {source})\n{doc['document']}")
+    # TODO: Call internal RAG API
+    # response = requests.post(_RAG_API_URL, json={"query": query, "top_k": top_k})
+    # results = response.json()
 
-    return "\n\n---\n\n".join(chunks)
+    return "(관련 참조 문서가 없습니다.)"
