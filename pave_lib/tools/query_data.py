@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pave_agent.db import oracle_client
+from pave_lib.db import oracle_client
 
 logger = logging.getLogger(__name__)
 

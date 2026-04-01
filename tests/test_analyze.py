@@ -1,6 +1,6 @@
 """Tests for analyze tool and sandbox executor."""
 
-from pave_agent.sandbox.executor import execute
+from pave_lib.sandbox.executor import execute
 
 
 class TestSandboxExecutor:

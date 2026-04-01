@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pave_agent import settings
+from pave_lib import settings
 
 logger = logging.getLogger(__name__)
 

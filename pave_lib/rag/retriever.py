@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pave_agent.db import vector_store
+from pave_lib.db import vector_store
 
 
 def retrieve(query: str, top_k: int = 5) -> str:

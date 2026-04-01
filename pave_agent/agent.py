@@ -7,10 +7,10 @@ Run with: adk web pave_agent  or  adk run pave_agent
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
 
-from pave_agent import settings
-from pave_agent.tools.query_data import query_data
-from pave_agent.tools.analyze import analyze
-from pave_agent.tools.interpret import interpret
+from pave_lib import settings
+from pave_lib.tools.query_data import query_data
+from pave_lib.tools.analyze import analyze
+from pave_lib.tools.interpret import interpret
 
 ORCHESTRATOR_INSTRUCTION = """\
 당신은 반도체 PDK Cell-level PPA (Power, Performance, Area) 분석 전문 어시스턴트입니다.

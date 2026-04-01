@@ -1,7 +1,7 @@
 """Tests for interpret tool components."""
 
-from pave_agent.rag.retriever import retrieve
-from pave_agent.rag.indexer import chunk_text
+from pave_lib.rag.retriever import retrieve
+from pave_lib.rag.indexer import chunk_text
 
 
 class TestChunkText:

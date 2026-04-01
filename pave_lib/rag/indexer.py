@@ -10,7 +10,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from pave_agent.db import vector_store
+from pave_lib.db import vector_store
 
 logger = logging.getLogger(__name__)
 

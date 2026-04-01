@@ -12,8 +12,8 @@ from typing import Any
 
 import litellm
 
-from pave_agent import settings
-from pave_agent.rag import retriever
+from pave_lib import settings
+from pave_lib.rag import retriever
 
 logger = logging.getLogger(__name__)
 

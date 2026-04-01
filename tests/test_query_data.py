@@ -1,6 +1,6 @@
 """Tests for query_data tool."""
 
-from pave_agent.tools.query_data import query_data, _normalize_param
+from pave_lib.tools.query_data import query_data, _normalize_param
 
 
 class TestNormalizeParam:
