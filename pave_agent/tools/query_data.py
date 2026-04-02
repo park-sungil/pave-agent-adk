@@ -102,6 +102,7 @@ def query_data(
 
         params, format_args = _build_params(template, filters)
         sql = template.format(**format_args)
+        logger.info("[SQL] query_type=%s\n%s\nparams=%s", query_type, sql, params)
         results = oracle_client.execute_query(sql, params)
 
         return {
