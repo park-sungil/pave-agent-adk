@@ -14,8 +14,6 @@ env/
 
 chroma_data/
 
-pave_agent/skills/
-
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
