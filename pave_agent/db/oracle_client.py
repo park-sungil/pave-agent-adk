@@ -22,9 +22,23 @@ def execute_query(sql: str, params: dict[str, Any] | None = None) -> list[dict[s
     return _execute_oracle(sql, params or {})
 
 
+_oracle_client_initialized = False
+
+
+def _ensure_thick_mode() -> None:
+    """Initialize Oracle thick mode once."""
+    global _oracle_client_initialized
+    if not _oracle_client_initialized:
+        import oracledb
+        oracledb.init_oracle_client()
+        _oracle_client_initialized = True
+
+
 def _execute_oracle(sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-    """Execute query against real Oracle DB."""
+    """Execute query against real Oracle DB (thick mode)."""
     import oracledb
+
+    _ensure_thick_mode()
 
     with oracledb.connect(
         user=settings.ORACLE_USER,
