@@ -17,17 +17,17 @@ from pave_agent.db import oracle_client
 logger = logging.getLogger(__name__)
 
 
-def _load_skill() -> tuple[dict[str, str], dict[str, list[str]]]:
-    """Parse SQL templates and cache config from sql_skill/SKILL.md.
+def _load_skill() -> tuple[dict[str, str], dict[str, str]]:
+    """Parse SQL templates and cache config from sql.md.
 
     Returns:
         (templates, cache_tables)
         - templates: {name: sql_string}
-        - cache_tables: {table_name: [filter_columns]}
+        - cache_tables: {query_type: table_name}
     """
     skill_path = settings.SKILLS_DIR / "references" / "sql.md"
     if not skill_path.exists():
-        logger.warning("sql_skill/SKILL.md not found at %s", skill_path)
+        logger.warning("sql.md not found at %s", skill_path)
         return {}, {}
 
     content = skill_path.read_text(encoding="utf-8")
@@ -42,19 +42,20 @@ def _load_skill() -> tuple[dict[str, str], dict[str, list[str]]]:
         templates[match.group(1)] = match.group(2).strip()
 
     # Cache tables: markdown table rows under ## Cache
-    cache_tables: dict[str, list[str]] = {}
+    # Format: | query_type | table_name |
+    cache_tables: dict[str, str] = {}
     cache_section = re.search(r"## Cache\s*\n(.*?)(?=\n## |\Z)", content, re.DOTALL)
     if cache_section:
         for row in re.finditer(
-            r"^\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|$",
+            r"^\|\s*([\w]+)\s*\|\s*([\w.]+)\s*\|$",
             cache_section.group(1),
             re.MULTILINE,
         ):
-            table = row.group(1)
-            cols = row.group(2)
-            if table in ("테이블", "---", ""):
+            qtype = row.group(1)
+            table = row.group(2)
+            if qtype in ("query_type", "---", ""):
                 continue
-            cache_tables[table] = [c.strip() for c in cols.split(",")]
+            cache_tables[qtype] = table
 
     logger.info(
         "Loaded sql_skill: %d templates, %d cache tables",
@@ -84,16 +85,16 @@ def query_data(
 
     try:
         # --- cached tables: full scan + Python filter ---
-        for table, filter_cols in _CACHE_TABLES.items():
-            if query_type == "versions":
-                if not data_cache.has(table):
-                    data_cache.put(
-                        table,
-                        oracle_client.execute_query(f"SELECT * FROM {table}"),
-                    )
-                all_rows = data_cache.get(table)
-                results = _filter_rows(all_rows, filters, filter_cols)
-                return {"data": results, "count": len(results), "query_type": query_type}
+        cache_table = _CACHE_TABLES.get(query_type)
+        if cache_table:
+            if not data_cache.has(cache_table):
+                data_cache.put(
+                    cache_table,
+                    oracle_client.execute_query(f"SELECT * FROM {cache_table}"),
+                )
+            all_rows = data_cache.get(cache_table)
+            results = _filter_rows(all_rows, filters)
+            return {"data": results, "count": len(results), "query_type": query_type}
 
         # --- SQL template queries ---
         template = _TEMPLATES.get(query_type)
@@ -119,20 +120,19 @@ def query_data(
 def _filter_rows(
     rows: list[dict[str, Any]],
     filters: dict[str, Any],
-    match_cols: list[str],
 ) -> list[dict[str, Any]]:
-    """Filter cached rows: a row matches if any match_col equals any filter value."""
+    """Filter cached rows by matching filter keys to column names (case-insensitive, AND logic)."""
     if not filters:
         return rows
-    filter_values = set()
-    for v in filters.values():
-        if isinstance(v, list):
-            filter_values.update(v)
-        else:
-            filter_values.add(v)
+    # Map filter keys to uppercase column names
+    conditions = {k.upper(): v for k, v in filters.items()}
     return [
         r for r in rows
-        if any(r.get(col) in filter_values for col in match_cols)
+        if all(
+            r.get(col) == val or (isinstance(val, list) and r.get(col) in val)
+            for col, val in conditions.items()
+            if col in r  # skip filter keys that don't match any column
+        )
     ]
 
 
