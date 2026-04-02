@@ -78,13 +78,11 @@ ORCHESTRATOR_INSTRUCTION = """\
 - 추천은 보수적으로 합니다 ("검토해볼 만합니다", not "추천합니다").
 """
 
-_llm_kwargs: dict = {"model": settings.LLM_MODEL}
-if settings.LLM_API_BASE:
-    _llm_kwargs["api_base"] = settings.LLM_API_BASE
+_llm = LiteLlm(model=settings.LLM_MODEL, api_base=settings.LLM_API_BASE or None)
 
 root_agent = Agent(
     name="pave_agent",
-    model=LiteLlm(**_llm_kwargs),
+    model=_llm,
     description="반도체 PDK Cell-level PPA 분석 챗봇 에이전트",
     instruction=ORCHESTRATOR_INSTRUCTION,
     tools=[query_data, analyze, interpret],
