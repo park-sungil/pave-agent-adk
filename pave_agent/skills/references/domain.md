@@ -1,8 +1,3 @@
----
-name: domain_skill
-description: 반도체 PPA 데이터의 도메인 해석 규칙을 정의한다. interpret tool이 분석 결과를 해석할 때 항상 참조하는 핵심 규칙이다.
----
-
 # Domain Skill — 반도체 PPA 해석 규칙
 
 ## 셀 타입

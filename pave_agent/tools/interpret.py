@@ -18,7 +18,7 @@ from pave_agent.rag import retriever
 logger = logging.getLogger(__name__)
 
 # Load Domain Skill content (always injected)
-_DOMAIN_SKILL_PATH = settings.SKILLS_DIR / "domain_skill" / "SKILL.md"
+_DOMAIN_SKILL_PATH = settings.SKILLS_DIR / "references" / "domain.md"
 _DOMAIN_SKILL: str = ""
 if _DOMAIN_SKILL_PATH.exists():
     _DOMAIN_SKILL = _DOMAIN_SKILL_PATH.read_text(encoding="utf-8")

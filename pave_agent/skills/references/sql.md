@@ -1,8 +1,3 @@
----
-name: sql_skill
-description: DB 뷰 스키마, SQL 템플릿, 엔티티 매핑 규칙을 정의한다. query_data tool이 SQL을 조립할 때 참조한다.
----
-
 # SQL Skill
 
 ## Views

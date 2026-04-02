@@ -19,7 +19,7 @@ from pave_agent.sandbox import executor
 logger = logging.getLogger(__name__)
 
 # Load Analysis Skill content
-_ANALYSIS_SKILL_PATH = settings.SKILLS_DIR / "analysis_skill" / "SKILL.md"
+_ANALYSIS_SKILL_PATH = settings.SKILLS_DIR / "references" / "analysis.md"
 _ANALYSIS_SKILL: str = ""
 if _ANALYSIS_SKILL_PATH.exists():
     _ANALYSIS_SKILL = _ANALYSIS_SKILL_PATH.read_text(encoding="utf-8")

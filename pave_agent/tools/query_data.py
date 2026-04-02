@@ -25,7 +25,7 @@ def _load_skill() -> tuple[dict[str, str], dict[str, list[str]]]:
         - templates: {name: sql_string}
         - cache_tables: {table_name: [filter_columns]}
     """
-    skill_path = settings.SKILLS_DIR / "sql_skill" / "SKILL.md"
+    skill_path = settings.SKILLS_DIR / "references" / "sql.md"
     if not skill_path.exists():
         logger.warning("sql_skill/SKILL.md not found at %s", skill_path)
         return {}, {}

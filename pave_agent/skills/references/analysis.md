@@ -1,8 +1,3 @@
----
-name: analysis_skill
-description: PPA 데이터 분석을 위한 코드 생성 패턴, 컨벤션, 데이터 전처리 규칙을 정의한다. analyze tool이 Python 코드를 생성할 때 참조한다.
----
-
 # Analysis Skill
 
 ## Code Generation Conventions
