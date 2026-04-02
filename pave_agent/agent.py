@@ -78,7 +78,11 @@ ORCHESTRATOR_INSTRUCTION = """\
 - 추천은 보수적으로 합니다 ("검토해볼 만합니다", not "추천합니다").
 """
 
-_llm = LiteLlm(model=settings.LLM_MODEL, api_base=settings.LLM_API_BASE or None)
+_llm = LiteLlm(
+    model=settings.LLM_MODEL,
+    api_base=settings.LLM_API_BASE or None,
+    api_key=settings.LLM_API_KEY or None,
+)
 
 root_agent = Agent(
     name="pave_agent",
