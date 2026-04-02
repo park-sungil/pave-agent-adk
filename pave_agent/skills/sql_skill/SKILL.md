@@ -7,7 +7,7 @@ description: DB 뷰 스키마, SQL 템플릿, 엔티티 매핑 규칙을 정의�
 
 ## Views
 
-### PAVE_PDK_VERSION_VIEW (PDK 버전 정보)
+### ANTSDB.PAVE_PDK_VERSION_VIEW (PDK 버전 정보)
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -25,11 +25,11 @@ description: DB 뷰 스키마, SQL 템플릿, 엔티티 매핑 규칙을 정의�
 | CREATED_AT | DATE | 생성일 |
 | CREATED_BY | VARCHAR2 | 생성자 |
 
-### PAVE_PPA_DATA_VIEW (셀 레벨 PPA 측정 데이터)
+### ANTSDB.PAVE_PPA_DATA_VIEW (셀 레벨 PPA 측정 데이터)
 
 | Column | Type | Description |
 |--------|------|-------------|
-| PDK_ID | NUMBER | FK → PAVE_PDK_VERSION_VIEW.PAVE_PDK_ID |
+| PDK_ID | NUMBER | FK → ANTSDB.PAVE_PDK_VERSION_VIEW.PAVE_PDK_ID |
 | CELL | VARCHAR2 | 셀 타입 (INV, ND2, NR2) |
 | DS | VARCHAR2 | Drive Strength (D1, D2, D3, D4) |
 | CORNER | VARCHAR2 | Process corner (TT, FF, SS, SF, FS, SSPG) |
@@ -53,8 +53,8 @@ description: DB 뷰 스키마, SQL 템플릿, 엔티티 매핑 규칙을 정의�
 ```sql
 -- 두 View 조인
 SELECT v.PROJECT, v.MASK, d.CELL, d.FREQ_GHZ
-FROM PAVE_PPA_DATA_VIEW d
-JOIN PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
+FROM ANTSDB.PAVE_PPA_DATA_VIEW d
+JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
 WHERE v.PROJECT = :project
 ```
 
@@ -65,8 +65,8 @@ WHERE v.PROJECT = :project
 SELECT d.CELL, d.DS, d.CORNER, d.TEMP, d.VDD, d.VTH,
        d.FREQ_GHZ, d.D_POWER, d.D_ENERGY, d.ACCEFF_FF, d.ACREFF_KOHM,
        d.S_POWER, d.IDDQ_NA, d.WNS, d.CH, d.CH_TYPE
-FROM PAVE_PPA_DATA_VIEW d
-JOIN PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
+FROM ANTSDB.PAVE_PPA_DATA_VIEW d
+JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
 WHERE v.PROJECT = :project
   AND d.CELL = :cell
   {pdk_clause}
@@ -77,8 +77,8 @@ ORDER BY d.CELL, d.CORNER
 ```sql
 SELECT d.CELL, d.DS, d.CORNER, d.TEMP, d.VDD, d.VTH,
        d.FREQ_GHZ, d.D_POWER, d.S_POWER, d.IDDQ_NA
-FROM PAVE_PPA_DATA_VIEW d
-JOIN PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
+FROM ANTSDB.PAVE_PPA_DATA_VIEW d
+JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
 WHERE v.PROJECT = :project
   AND d.CELL IN ({cell_placeholders})
   {pdk_clause}
@@ -90,8 +90,8 @@ ORDER BY d.CELL, d.DS
 SELECT v.PAVE_PDK_ID, v.MASK, v.HSPICE, v.CREATED_AT,
        d.CELL, d.DS, d.CORNER, d.TEMP, d.VDD,
        d.FREQ_GHZ, d.D_POWER, d.S_POWER, d.IDDQ_NA
-FROM PAVE_PPA_DATA_VIEW d
-JOIN PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
+FROM ANTSDB.PAVE_PPA_DATA_VIEW d
+JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
 WHERE v.PROJECT = :project
   AND d.CELL = :cell
 ORDER BY v.CREATED_AT, d.CELL
@@ -121,7 +121,7 @@ ORDER BY v.CREATED_AT, d.CELL
 
 | 테이블 | 필터 컬럼 |
 |--------|-----------|
-| PAVE_PDK_VERSION_VIEW | PROJECT, PROJECT_NAME |
+| ANTSDB.PAVE_PDK_VERSION_VIEW | PROJECT, PROJECT_NAME |
 
 ## 주의사항
 - PDK ID 미지정 시 IS_GOLDEN = 1 인 golden PDK를 기본으로 사용

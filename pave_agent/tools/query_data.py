@@ -46,7 +46,7 @@ def _load_skill() -> tuple[dict[str, str], dict[str, list[str]]]:
     cache_section = re.search(r"## Cache\s*\n(.*?)(?=\n## |\Z)", content, re.DOTALL)
     if cache_section:
         for row in re.finditer(
-            r"^\|\s*(\w+)\s*\|\s*(.+?)\s*\|$",
+            r"^\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|$",
             cache_section.group(1),
             re.MULTILINE,
         ):
