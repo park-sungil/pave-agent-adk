@@ -1,6 +1,7 @@
-"""PAVE sub-agent: Semiconductor PPA analysis.
+"""PAVE agent: Semiconductor PPA analysis.
 
-Wires common engines to the PAVE domain skill.
+ADK entry point. Wires common engines to the PAVE domain skill.
+Run with: adk web .
 """
 
 from pathlib import Path
@@ -97,7 +98,7 @@ _llm = LiteLlm(
     api_key=settings.LLM_API_KEY or None,
 )
 
-pave_agent = Agent(
+root_agent = Agent(
     name="pave_agent",
     model=_llm,
     description="반도체 PDK Cell-level PPA 분석 챗봇 에이전트",
