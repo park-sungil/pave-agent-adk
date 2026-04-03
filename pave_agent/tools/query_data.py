@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Any
 
-from google.adk.agents.readonly_context import ReadonlyContext
+from google.adk.tools import ToolContext
 
 from pave_agent import settings
 from pave_agent.db import oracle_client
@@ -57,14 +57,14 @@ _TEMPLATES, _CACHE_TABLES = _load_skill()
 
 
 def query_data(
-    ctx: ReadonlyContext,
+    tool_context: ToolContext,
     query_type: str,
     filters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """sql.md에 정의된 SQL 템플릿을 기반으로 DB 데이터를 조회한다.
 
     Args:
-        ctx: ADK context (session state for caching).
+        tool_context: ADK tool context (session state for caching).
         query_type: 쿼리 유형. sql.md에 정의된 템플릿명 또는 캐시 테이블명.
         filters: 쿼리 필터 조건.
 
@@ -79,11 +79,11 @@ def query_data(
         cache_table = _CACHE_TABLES.get(query_type)
         if cache_table:
             cache_key = f"_cache_{cache_table}"
-            if cache_key not in ctx.state:
-                ctx.state[cache_key] = oracle_client.execute_query(
+            if cache_key not in tool_context.state:
+                tool_context.state[cache_key] = oracle_client.execute_query(
                     f"SELECT * FROM {cache_table}"
                 )
-            all_rows = ctx.state[cache_key]
+            all_rows = tool_context.state[cache_key]
             results = _filter_rows(all_rows, filters)
             return {"data": results, "count": len(results), "query_type": query_type}
 
