@@ -20,7 +20,7 @@ INSTRUCTION = """\
 엔티티가 불명확하면 사용자에게 되물어보세요.
 
 ## 기본값 규칙
-- PDK: pdk_id 미지정 시 IS_GOLDEN=1 (query_data가 자동 처리)
+- PDK: query_data가 자동으로 적절한 PDK를 선택합니다. 후보가 여러 개면 candidates를 반환합니다.
 - corner, temp, vdd, vth, ds: 사용자가 명시한 것만 filters에 추가하세요
 
 ## 도구 호출 가이드
