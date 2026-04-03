@@ -26,6 +26,8 @@ def _get_conn() -> sqlite3.Connection:
 
 def query(sql: str, params: dict | None = None) -> list[dict]:
     """Execute SQL and return results as list of dicts."""
+    # Strip schema prefix — SQLite doesn't support schema-qualified names
+    sql = sql.replace("ANTSDB.", "")
     conn = _get_conn()
     cursor = conn.execute(sql, params or {})
     columns = [desc[0] for desc in cursor.description]

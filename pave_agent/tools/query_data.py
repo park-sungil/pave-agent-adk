@@ -1,7 +1,7 @@
 """query_data tool: Pure code SQL query builder and executor.
 
-No LLM calls. Assembles SQL from templates defined in sql_skill/SKILL.md,
-executes against DB.
+No LLM calls. Assembles SQL from templates defined in sql.md,
+executes against DB. Uses ADK session state for caching.
 """
 
 from __future__ import annotations
@@ -10,8 +10,9 @@ import logging
 import re
 from typing import Any
 
+from google.adk.agents.readonly_context import ReadonlyContext
+
 from pave_agent import settings
-from pave_agent.cache import data_cache
 from pave_agent.db import oracle_client
 
 logger = logging.getLogger(__name__)
@@ -68,14 +69,16 @@ _TEMPLATES, _CACHE_TABLES = _load_skill()
 
 
 def query_data(
+    ctx: ReadonlyContext,
     query_type: str,
     filters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """sql_skill에 정의된 SQL 템플릿을 기반으로 DB 데이터를 조회한다.
+    """sql.md에 정의된 SQL 템플릿을 기반으로 DB 데이터를 조회한다.
 
     Args:
-        query_type: 쿼리 유형. sql_skill에 정의된 템플릿명 또는 "versions".
-        filters: 쿼리 필터 조건. 키는 sql_skill의 Entity Mapping에 정의된 컬럼/파라미터명.
+        ctx: ADK context (session state for caching).
+        query_type: 쿼리 유형. sql.md에 정의된 템플릿명 또는 캐시 테이블명.
+        filters: 쿼리 필터 조건.
 
     Returns:
         {"data": [...], "count": int, "query_type": str}.
@@ -87,12 +90,12 @@ def query_data(
         # --- cached tables: full scan + Python filter ---
         cache_table = _CACHE_TABLES.get(query_type)
         if cache_table:
-            if not data_cache.has(cache_table):
-                data_cache.put(
-                    cache_table,
-                    oracle_client.execute_query(f"SELECT * FROM {cache_table}"),
+            cache_key = f"_cache_{cache_table}"
+            if cache_key not in ctx.state:
+                ctx.state[cache_key] = oracle_client.execute_query(
+                    f"SELECT * FROM {cache_table}"
                 )
-            all_rows = data_cache.get(cache_table)
+            all_rows = ctx.state[cache_key]
             results = _filter_rows(all_rows, filters)
             return {"data": results, "count": len(results), "query_type": query_type}
 
@@ -121,18 +124,31 @@ def _filter_rows(
     rows: list[dict[str, Any]],
     filters: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Filter cached rows by matching filter keys to column names (case-insensitive, AND logic)."""
+    """Filter cached rows by matching filter keys to column names (case-insensitive, AND logic).
+
+    A filter key matches any column whose name starts with the key (e.g., "PROJECT"
+    matches both "PROJECT" and "PROJECT_NAME"). A row passes if ANY matching column
+    contains the filter value.
+    """
     if not filters:
         return rows
-    # Map filter keys to uppercase column names
     conditions = {k.upper(): v for k, v in filters.items()}
+    if not rows:
+        return rows
+    all_cols = list(rows[0].keys())
+
+    def _matches(row: dict, key: str, val: Any) -> bool:
+        cols = [c for c in all_cols if c.startswith(key)]
+        if not cols:
+            return True  # skip filter keys that don't match any column
+        return any(
+            row.get(c) == val or (isinstance(val, list) and row.get(c) in val)
+            for c in cols
+        )
+
     return [
         r for r in rows
-        if all(
-            r.get(col) == val or (isinstance(val, list) and r.get(col) in val)
-            for col, val in conditions.items()
-            if col in r  # skip filter keys that don't match any column
-        )
+        if all(_matches(r, key, val) for key, val in conditions.items())
     ]
 
 
