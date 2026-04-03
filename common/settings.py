@@ -18,8 +18,7 @@ ORACLE_USER: str = os.getenv("ORACLE_USER", "pave")
 ORACLE_PASSWORD: str = os.getenv("ORACLE_PASSWORD", "")
 
 # Paths
-PROJECT_ROOT: Path = Path(__file__).parent
-SKILLS_DIR: Path = PROJECT_ROOT / "skills"
+PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent  # project root
 
 # Logging
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

@@ -8,43 +8,37 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 from google.adk.agents.readonly_context import ReadonlyContext
 
-from pave_agent import settings
-from pave_agent.db import oracle_client
+from common.db import oracle_client
 
 logger = logging.getLogger(__name__)
 
+_TEMPLATES: dict[str, str] = {}
+_CACHE_TABLES: dict[str, str] = {}
 
-def _load_skill() -> tuple[dict[str, str], dict[str, str]]:
-    """Parse SQL templates and cache config from sql.md.
 
-    Returns:
-        (templates, cache_tables)
-        - templates: {name: sql_string}
-        - cache_tables: {query_type: table_name}
-    """
-    skill_path = settings.SKILLS_DIR / "references" / "sql.md"
-    if not skill_path.exists():
-        logger.warning("sql.md not found at %s", skill_path)
-        return {}, {}
+def init_skill(skill_dir: Path) -> None:
+    """Parse SQL templates and cache config from skill's references/sql.md."""
+    global _TEMPLATES, _CACHE_TABLES
 
-    content = skill_path.read_text(encoding="utf-8")
+    sql_path = skill_dir / "references" / "sql.md"
+    if not sql_path.exists():
+        logger.warning("sql.md not found at %s", sql_path)
+        return
 
-    # SQL templates: ### template_name\n```sql\n...\n```
-    templates: dict[str, str] = {}
+    content = sql_path.read_text(encoding="utf-8")
+
     for match in re.finditer(
         r"###\s+(\w+)\s*\n```sql\s*\n(.*?)```",
         content,
         re.DOTALL,
     ):
-        templates[match.group(1)] = match.group(2).strip()
+        _TEMPLATES[match.group(1)] = match.group(2).strip()
 
-    # Cache tables: markdown table rows under ## Cache
-    # Format: | query_type | table_name |
-    cache_tables: dict[str, str] = {}
     cache_section = re.search(r"## Cache\s*\n(.*?)(?=\n## |\Z)", content, re.DOTALL)
     if cache_section:
         for row in re.finditer(
@@ -56,16 +50,9 @@ def _load_skill() -> tuple[dict[str, str], dict[str, str]]:
             table = row.group(2)
             if qtype in ("query_type", "---", ""):
                 continue
-            cache_tables[qtype] = table
+            _CACHE_TABLES[qtype] = table
 
-    logger.info(
-        "Loaded sql_skill: %d templates, %d cache tables",
-        len(templates), len(cache_tables),
-    )
-    return templates, cache_tables
-
-
-_TEMPLATES, _CACHE_TABLES = _load_skill()
+    logger.info("Loaded sql skill: %d templates, %d cache tables", len(_TEMPLATES), len(_CACHE_TABLES))
 
 
 def query_data(

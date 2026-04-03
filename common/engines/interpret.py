@@ -8,20 +8,26 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import litellm
 
-from pave_agent import settings
-from pave_agent.rag import retriever
+from common import settings
+from common.rag import retriever
 
 logger = logging.getLogger(__name__)
 
-# Load Domain Skill content (always injected)
-_DOMAIN_SKILL_PATH = settings.SKILLS_DIR / "references" / "interpretation.md"
 _DOMAIN_SKILL: str = ""
-if _DOMAIN_SKILL_PATH.exists():
-    _DOMAIN_SKILL = _DOMAIN_SKILL_PATH.read_text(encoding="utf-8")
+
+
+def init_skill(skill_dir: Path) -> None:
+    """Load domain skill content from skill's references/interpretation.md."""
+    global _DOMAIN_SKILL
+    path = skill_dir / "references" / "interpretation.md"
+    if path.exists():
+        _DOMAIN_SKILL = path.read_text(encoding="utf-8")
+        logger.info("Loaded domain skill from %s", path)
 
 _INTERPRET_PROMPT = """당신은 도메인 전문가입니다.
 아래의 도메인 규칙과 참조 문서를 바탕으로, 주어진 데이터/분석 결과를 해석하세요.
