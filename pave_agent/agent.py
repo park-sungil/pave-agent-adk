@@ -15,13 +15,18 @@ from pave_agent.tools.interpret import interpret
 
 
 def _init_state(callback_context: CallbackContext) -> None:
-    """Load SQL skill (templates, cache config) into session state on first run."""
-    if "_skill_loaded" not in callback_context.state:
-        from pave_agent.tools.query_data import _TEMPLATES, _CACHE_TABLES
+    """Pre-load all PDK versions into session state on first run."""
+    if "_versions_loaded" not in callback_context.state:
+        from pave_agent.db import oracle_client
+        from pave_agent.tools.query_data import _CACHE_TABLES
 
-        callback_context.state["_skill_loaded"] = True
-        callback_context.state["_sql_templates"] = list(_TEMPLATES.keys())
-        callback_context.state["_cache_tables"] = _CACHE_TABLES
+        for query_type, table in _CACHE_TABLES.items():
+            cache_key = f"_cache_{table}"
+            if cache_key not in callback_context.state:
+                callback_context.state[cache_key] = oracle_client.execute_query(
+                    f"SELECT * FROM {table}"
+                )
+        callback_context.state["_versions_loaded"] = True
 
 
 _llm = LiteLlm(
