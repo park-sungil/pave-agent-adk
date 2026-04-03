@@ -17,7 +17,7 @@ from common.engines.analyze import analyze
 from common.engines.interpret import interpret
 
 # --- Skill initialization ---
-SKILL_DIR = Path(__file__).resolve().parent / "skills" / "pave-dk-skill"
+SKILL_DIR = Path(__file__).resolve().parent / "skills" / "pave-skill"
 
 qd_engine.init_skill(SKILL_DIR)
 az_engine.init_skill(SKILL_DIR)
