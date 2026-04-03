@@ -9,7 +9,7 @@ from common.engines import query_data as qd_engine
 from common.engines.query_data import query_data
 
 # Init skill from PAVE skill directory
-_SKILL_DIR = Path(__file__).resolve().parent.parent / "agents" / "pave_agent" / "skills" / "pave-skill"
+_SKILL_DIR = Path(__file__).resolve().parent.parent / "root_agent" / "pave_agent" / "skills" / "pave-skill"
 qd_engine.init_skill(_SKILL_DIR)
 
 
