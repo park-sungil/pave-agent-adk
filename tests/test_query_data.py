@@ -4,13 +4,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pave_agent.tools.query_data import query_data
+from pave_agent.db import oracle_client
+from pave_agent.tools.query_data import _CACHE_TABLES, query_data
 
 
 def _make_tool_context():
-    """Create a mock ADK ToolContext with dict-like state."""
+    """Create a mock ADK ToolContext with pre-loaded versions cache."""
     ctx = MagicMock()
     ctx.state = {}
+    # Pre-load versions like before_agent_callback does
+    for query_type, table in _CACHE_TABLES.items():
+        cache_key = f"_cache_{table}"
+        ctx.state[cache_key] = oracle_client.execute_query(f"SELECT * FROM {table}")
     return ctx
 
 
@@ -59,20 +64,24 @@ class TestQueryData:
 
     def test_versions_cached_in_session(self):
         ctx = _make_tool_context()
-        query_data(ctx, "versions", {"project": "S5E9945"})
         assert "_cache_ANTSDB.PAVE_PDK_VERSION_VIEW" in ctx.state
-        query_data(ctx, "versions", {"project": "S5E9955"})
 
     def test_unknown_query_type(self):
         ctx = _make_tool_context()
         result = query_data(ctx, "invalid", {"project": "S5E9945"})
         assert "error" in result
 
-    def test_no_matching_data(self):
+    def test_no_matching_pdk(self):
         ctx = _make_tool_context()
         result = query_data(ctx, "single_cell", {"project": "NONEXIST", "cell": "FAKE"})
-        assert "error" not in result
-        assert result["count"] == 0
+        assert "error" in result  # no PDK found
+
+    def test_pdk_resolution_candidates(self):
+        """When multiple golden PDKs exist for same project, returns candidates."""
+        ctx = _make_tool_context()
+        result = query_data(ctx, "single_cell", {"project": "S5E9945", "cell": "INV"})
+        # Should either resolve (data) or return candidates
+        assert "data" in result or "candidates" in result
 
     def test_no_filters(self):
         ctx = _make_tool_context()

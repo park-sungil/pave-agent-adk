@@ -70,12 +70,13 @@ def query_data(
 
     Returns:
         {"data": [...], "count": int, "query_type": str}.
+        PDK 후보가 여러 개면 {"candidates": [...], "message": str}.
         오류 시 {"error": str}.
     """
     filters = filters or {}
 
     try:
-        # --- cached tables: full scan + Python filter ---
+        # --- cached tables (versions): full scan + Python filter ---
         cache_table = _CACHE_TABLES.get(query_type)
         if cache_table:
             cache_key = f"_cache_{cache_table}"
@@ -87,19 +88,55 @@ def query_data(
             results = _filter_rows(all_rows, filters)
             return {"data": results, "count": len(results), "query_type": query_type}
 
-        # --- SQL template queries ---
+        # --- SQL template queries: resolve PDK first ---
         template = _TEMPLATES.get(query_type)
         if template is None:
             return {"error": f"Unknown query_type: {query_type}"}
 
-        params, format_args = _build_params(template, filters)
-        sql = template.format(**format_args)
-        logger.info("[SQL] query_type=%s\n%s\nparams=%s", query_type, sql, params)
-        results = oracle_client.execute_query(sql, params)
+        # PDK resolution — only for templates that use :pdk_id
+        needs_pdk = ":pdk_id" in template
+        versions_table = _CACHE_TABLES.get("versions")
+        if needs_pdk and versions_table:
+            cache_key = f"_cache_{versions_table}"
+            cached_versions = tool_context.state.get(cache_key, [])
+            resolve_result = _resolve_pdks(cached_versions, filters)
+
+            if resolve_result["status"] == "resolved":
+                # Single or multiple confirmed PDK IDs
+                pdk_ids = resolve_result["pdk_ids"]
+            elif resolve_result["status"] == "candidates":
+                return {
+                    "candidates": resolve_result["candidates"],
+                    "message": "PDK 버전을 선택해주세요.",
+                    "query_type": query_type,
+                }
+            else:  # no_match
+                return {
+                    "error": "조건에 맞는 PDK가 없습니다.",
+                    "available": resolve_result.get("available", {}),
+                    "query_type": query_type,
+                }
+        elif needs_pdk:
+            pdk_ids = [filters["pdk_id"]] if "pdk_id" in filters else []
+        else:
+            # Template doesn't need pdk_id (e.g., trend) — execute directly
+            params, format_args = _build_params(template, filters)
+            sql = template.format(**format_args)
+            logger.info("[SQL] query_type=%s\n%s\nparams=%s", query_type, sql, params)
+            results = oracle_client.execute_query(sql, params)
+            return {"data": results, "count": len(results), "query_type": query_type}
+
+        # Execute SQL for each resolved PDK
+        all_results: list[dict[str, Any]] = []
+        for pdk_id in pdk_ids:
+            params, format_args = _build_params(template, {**filters, "pdk_id": pdk_id})
+            sql = template.format(**format_args)
+            logger.info("[SQL] query_type=%s pdk_id=%s\n%s\nparams=%s", query_type, pdk_id, sql, params)
+            all_results.extend(oracle_client.execute_query(sql, params))
 
         return {
-            "data": results,
-            "count": len(results),
+            "data": all_results,
+            "count": len(all_results),
             "query_type": query_type,
         }
 
@@ -140,6 +177,88 @@ def _filter_rows(
     ]
 
 
+_PDK_FILTER_KEYS = {"process", "project", "project_name", "mask", "dk_gds"}
+_TOOL_VERSION_KEYS = {"hspice", "lvs", "pex"}
+_CANDIDATE_COLUMNS = ["PAVE_PDK_ID", "PROCESS", "PROJECT_NAME", "MASK", "DK_GDS", "HSPICE", "LVS", "PEX"]
+
+
+def _resolve_pdks(
+    cached_versions: list[dict[str, Any]],
+    filters: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve PDK versions from cached data following PDK Selection Rules in sql.md.
+
+    Returns:
+        {"status": "resolved", "pdk_ids": [int, ...]}
+        {"status": "candidates", "candidates": [dict, ...]}
+        {"status": "no_match", "available": {...}}
+    """
+    if "pdk_id" in filters:
+        return {"status": "resolved", "pdk_ids": [filters["pdk_id"]]}
+
+    # Step 1: Narrow by PROCESS / PROJECT / PROJECT_NAME / MASK / DK_GDS
+    rows = cached_versions
+    for key in _PDK_FILTER_KEYS:
+        val = filters.get(key)
+        if val is None:
+            continue
+        upper_key = key.upper()
+        rows = [r for r in rows if r.get(upper_key) == val]
+
+    if not rows:
+        available_projects = sorted({r.get("PROJECT_NAME", "") for r in cached_versions})
+        return {"status": "no_match", "available": {"projects": available_projects}}
+
+    # Step 2: HSPICE/LVS/PEX explicitly specified
+    tool_filters = {k: filters[k] for k in _TOOL_VERSION_KEYS if k in filters}
+    if tool_filters:
+        for key, val in tool_filters.items():
+            rows = [r for r in rows if r.get(key.upper()) == val]
+        if not rows:
+            return {"status": "no_match", "available": {}}
+        # Dedup by 6-tuple, pick latest CREATED_AT
+        rows = _dedup_by_created_at(rows)
+    else:
+        # Step 3: HSPICE/LVS/PEX not specified — use IS_GOLDEN
+        golden = [r for r in rows if r.get("IS_GOLDEN") == 1]
+        if golden:
+            rows = golden
+
+    if not rows:
+        return {"status": "no_match", "available": {}}
+
+    if len(rows) == 1:
+        return {"status": "resolved", "pdk_ids": [rows[0]["PAVE_PDK_ID"]]}
+
+    # Multiple rows: check if ambiguous (same PROJECT+MASK, different DK_GDS)
+    # Different MASKs = all resolved (return all pdk_ids)
+    # Same MASK, different DK_GDS = ambiguous (ask user)
+    project_mask_groups: dict[tuple, list] = {}
+    for r in rows:
+        key = (r.get("PROJECT"), r.get("MASK"))
+        project_mask_groups.setdefault(key, []).append(r)
+
+    has_ambiguity = any(len(group) > 1 for group in project_mask_groups.values())
+    if has_ambiguity:
+        candidates = [{col: r.get(col) for col in _CANDIDATE_COLUMNS} for r in rows]
+        return {"status": "candidates", "candidates": candidates}
+
+    # All rows are from different (PROJECT, MASK) — all resolved
+    return {"status": "resolved", "pdk_ids": [r["PAVE_PDK_ID"] for r in rows]}
+
+
+def _dedup_by_created_at(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """For rows with same 6-tuple, keep the one with latest CREATED_AT."""
+    best: dict[tuple, dict[str, Any]] = {}
+    for r in rows:
+        key = (r.get("PROJECT"), r.get("MASK"), r.get("DK_GDS"),
+               r.get("HSPICE"), r.get("LVS"), r.get("PEX"))
+        existing = best.get(key)
+        if existing is None or str(r.get("CREATED_AT", "")) > str(existing.get("CREATED_AT", "")):
+            best[key] = r
+    return list(best.values())
+
+
 def _build_params(
     template: str,
     filters: dict[str, Any],
@@ -168,13 +287,6 @@ def _build_params(
             format_args[f"{lower_key}_placeholders"] = placeholders
         else:
             params[lower_key] = value
-
-    # Handle {pdk_clause} placeholder
-    if "{pdk_clause}" in template:
-        if "pdk_id" in params:
-            format_args["pdk_clause"] = "AND d.PDK_ID = :pdk_id"
-        else:
-            format_args["pdk_clause"] = "AND v.IS_GOLDEN = 1"
 
     # Handle {cell_placeholders} — if not already set by list expansion
     if "{cell_placeholders}" in template and "cell_placeholders" not in format_args:

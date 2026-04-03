@@ -64,7 +64,7 @@ FROM ANTSDB.PAVE_PPA_DATA_VIEW d
 JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
 WHERE v.PROJECT = :project
   AND d.CELL = :cell
-  {pdk_clause}
+  AND d.PDK_ID = :pdk_id
 ORDER BY d.CELL, d.CORNER
 ```
 
@@ -76,7 +76,7 @@ FROM ANTSDB.PAVE_PPA_DATA_VIEW d
 JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
 WHERE v.PROJECT = :project
   AND d.CELL IN ({cell_placeholders})
-  {pdk_clause}
+  AND d.PDK_ID = :pdk_id
 ORDER BY d.CELL, d.DS
 ```
 
@@ -118,6 +118,51 @@ ORDER BY v.CREATED_AT, d.CELL
 |------------|--------|
 | versions | ANTSDB.PAVE_PDK_VERSION_VIEW |
 
+## PDK Version Structure & Selection Logic
+
+### 컬럼 계층 구조
+PROCESS (공정명, 예: SF3, SF2P)
+  └─ 1:N ─► PROJECT / PROJECT_NAME (내부 코드 / 별명, 예: S5E9945 / Thetis)
+                └─ 1:N ─► MASK (테이프아웃 단계, 예: EVT0, EVT1)
+                              └─ 1:N ─► DK_GDS (디자인 킷 GDS 버전)
+                                            └─ 1:N ─► HSPICE / LVS / PEX (도구 버전)
+
+고유 PDK = (PROJECT, MASK, DK_GDS, HSPICE, LVS, PEX) 조합으로 식별
+
+| 컬럼 | 의미 | 사용자 언급 빈도 |
+|------|------|----------------|
+| PROCESS | 공정명 (SF3, SF2P…) | 높음 — 대화 진입점 |
+| PROJECT | 내부 프로젝트 코드 (S5E9945…) | 낮음 |
+| PROJECT_NAME | 프로젝트 별명 (Root, Thetis, Solomon…) | 중간 |
+| MASK | 테이프아웃 단계 (EVT0, EVT1) | 중간 |
+| DK_GDS | 디자인 킷 GDS 설정 | 낮음 |
+| HSPICE / LVS / PEX | 도구 버전 — 하나라도 바뀌면 PPA 결과가 달라짐 | 낮음 |
+| IS_GOLDEN | 관리자가 지정한 대표 버전 플래그 | 사용자가 직접 언급 안 함 — 자동 적용 |
+| VDD_NOMINAL | 공칭 동작 전압 | 낮음 |
+| CREATED_AT | 행 생성 타임스탬프 | 사용자 언급 안 함 — 중복 제거용 |
+
+### IS_GOLDEN 범위
+IS_GOLDEN=1은 (PROJECT, MASK, DK_GDS) 조합당 1개 존재. 해당 조합의 HSPICE/LVS/PEX 변형 중 대표 버전을 지정.
+
+### PDK 선택 규칙
+Step 1 — PROCESS / PROJECT / PROJECT_NAME / MASK / DK_GDS로 1차 필터링 (캐시에서 인메모리).
+Step 2 — HSPICE/LVS/PEX를 사용자가 명시한 경우:
+  - 해당 도구 버전으로 필터링
+  - 동일 6-tuple에 여러 행이면 → CREATED_AT 최신 1개 선택
+  - 정확히 1행 반환
+Step 3 — HSPICE/LVS/PEX 미명시 (일반적 케이스):
+  - IS_GOLDEN=1 행만 반환 (DK_GDS 변형별 1개)
+  - IS_GOLDEN=1이 없으면 → 남은 전체 행 반환 (사용자가 대화형으로 선택)
+
+### 사용자 인터랙션 트리거 조건
+위 규칙 적용 후에도 후보가 여러 개일 때만 테이블을 보여준다
+(PROCESS, PROJECT_NAME, MASK, DK_GDS, HSPICE, LVS, PEX 컬럼 표시).
+즉, 동일 (PROJECT, MASK)에 DK_GDS 변형이 여러 개이고 각각 IS_GOLDEN이 있는 경우.
+
+### 반환 형식
+- 1행 → 확정, PAVE_PDK_ID로 PPA 데이터 조회
+- 여러 행 → 후보 목록 반환, 오케스트레이터가 사용자에게 선택 요청
+- 0행 → 에러 + 가능한 옵션 제시
+
 ## 주의사항
-- PDK ID 미지정 시 IS_GOLDEN = 1 인 golden PDK를 기본으로 사용
 - PPA 비교 시 반드시 동일 PVT corner (CORNER, VDD, TEMP) 조건 확인

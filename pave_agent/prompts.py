@@ -47,6 +47,17 @@ INSTRUCTION = """\
 → `analyze([데이터A + 데이터B], "두 PDK(882 vs 883) 간 메트릭별 delta 및 % 변화 분석")`
 → `interpret(분석결과, question)`
 
+### PDK 버전 선택
+query_data가 `candidates`를 반환하면, PDK 버전이 여러 개라는 뜻입니다.
+이때 반드시 테이블 형태로 후보를 보여주고 사용자에게 선택을 요청하세요:
+
+| # | PROCESS | PROJECT_NAME | MASK | DK_GDS | HSPICE | LVS | PEX |
+|---|---------|-------------|------|--------|--------|-----|-----|
+| 1 | SF2 | Thetis | EVT0 | Thetis EVT0 | v0.9.0.0 | v0.9.5.0 | v1.0.0.0 |
+| 2 | SF2 | Thetis | EVT1 | Thetis EVT1 | v1.0.0.0 | v0.9.5.0 | v0.9.0.0 |
+
+사용자가 번호 또는 조건으로 선택하면 해당 pdk_id로 다시 query_data를 호출하세요.
+
 ### PDK 버전 목록
 → `query_data("versions", {"project": "Solomon"})`
 
