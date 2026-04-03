@@ -13,7 +13,7 @@ from typing import Any
 
 from google.adk.agents.readonly_context import ReadonlyContext
 
-from common.db import oracle_client
+from pave_agent.db import oracle_client
 
 logger = logging.getLogger(__name__)
 

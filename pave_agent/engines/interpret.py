@@ -13,8 +13,8 @@ from typing import Any
 
 import litellm
 
-from common import settings
-from common.rag import retriever
+from pave_agent import settings
+from pave_agent.rag import retriever
 
 logger = logging.getLogger(__name__)
 

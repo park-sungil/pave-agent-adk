@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from common import settings
+from pave_agent import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def _use_mock() -> bool:
 def execute_query(sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Execute a SQL query and return results as list of dicts."""
     if _use_mock():
-        from common.db import mock_db
+        from pave_agent.db import mock_db
         return mock_db.query(sql, params)
     return _execute_oracle(sql, params or {})
 

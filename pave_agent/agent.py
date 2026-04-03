@@ -9,13 +9,13 @@ from pathlib import Path
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
 
-from common import settings
-from common.engines import query_data as qd_engine
-from common.engines import analyze as az_engine
-from common.engines import interpret as ip_engine
-from common.engines.query_data import query_data
-from common.engines.analyze import analyze
-from common.engines.interpret import interpret
+from pave_agent import settings
+from pave_agent.engines import query_data as qd_engine
+from pave_agent.engines import analyze as az_engine
+from pave_agent.engines import interpret as ip_engine
+from pave_agent.engines.query_data import query_data
+from pave_agent.engines.analyze import analyze
+from pave_agent.engines.interpret import interpret
 
 # --- Skill initialization ---
 SKILL_DIR = Path(__file__).resolve().parent / "skills" / "pave-skill"

@@ -13,8 +13,8 @@ from typing import Any
 
 import litellm
 
-from common import settings
-from common.sandbox import executor
+from pave_agent import settings
+from pave_agent.sandbox import executor
 
 logger = logging.getLogger(__name__)
 
