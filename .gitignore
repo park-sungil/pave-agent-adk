@@ -23,3 +23,5 @@ chroma_data/
 .DS_Store
 *.swp
 *.swo
+
+uv.lock
