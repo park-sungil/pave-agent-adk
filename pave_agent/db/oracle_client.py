@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import Any
 
@@ -15,11 +16,26 @@ def _use_mock() -> bool:
 
 
 def execute_query(sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Execute a SQL query and return results as list of dicts."""
+    """Execute a SQL query and return results as list of dicts.
+
+    datetime values are converted to ISO strings for JSON serialization.
+    """
     if _use_mock():
         from pave_agent.db import mock_db
-        return mock_db.query(sql, params)
-    return _execute_oracle(sql, params or {})
+        rows = mock_db.query(sql, params)
+    else:
+        rows = _execute_oracle(sql, params or {})
+    return [
+        {k: _serialize_datetime(v) for k, v in row.items()}
+        for row in rows
+    ]
+
+
+def _serialize_datetime(value: Any) -> Any:
+    """Convert datetime to ISO string."""
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    return value
 
 
 _oracle_client_initialized = False
