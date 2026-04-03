@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import Any
 
 import litellm
@@ -18,16 +17,8 @@ from pave_agent.sandbox import executor
 
 logger = logging.getLogger(__name__)
 
-_ANALYSIS_SKILL: str = ""
-
-
-def init_skill(skill_dir: Path) -> None:
-    """Load analysis skill content from skill's references/analysis.md."""
-    global _ANALYSIS_SKILL
-    path = skill_dir / "references" / "analysis.md"
-    if path.exists():
-        _ANALYSIS_SKILL = path.read_text(encoding="utf-8")
-        logger.info("Loaded analysis skill from %s", path)
+_SKILL_PATH = settings.SKILL_DIR / "references" / "analysis.md"
+_ANALYSIS_SKILL: str = _SKILL_PATH.read_text(encoding="utf-8") if _SKILL_PATH.exists() else ""
 
 _CODE_GEN_PROMPT = """당신은 데이터를 분석하는 Python 코드 생성기입니다.
 

@@ -1,16 +1,10 @@
 """Tests for query_data tool."""
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from pave_agent.engines import query_data as qd_engine
-from pave_agent.engines.query_data import query_data
-
-# Init skill from PAVE skill directory
-_SKILL_DIR = Path(__file__).resolve().parent.parent / "pave_agent" / "skills" / "pave-skill"
-qd_engine.init_skill(_SKILL_DIR)
+from pave_agent.tools.query_data import query_data
 
 
 def _make_ctx():

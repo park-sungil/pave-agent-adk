@@ -1,28 +1,15 @@
 """PAVE agent: Semiconductor PPA analysis.
 
-ADK entry point. Wires common engines to the PAVE domain skill.
-Run with: adk web .
+ADK entry point. Run with: adk web .
 """
-
-from pathlib import Path
 
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
 
 from pave_agent import settings
-from pave_agent.engines import query_data as qd_engine
-from pave_agent.engines import analyze as az_engine
-from pave_agent.engines import interpret as ip_engine
-from pave_agent.engines.query_data import query_data
-from pave_agent.engines.analyze import analyze
-from pave_agent.engines.interpret import interpret
-
-# --- Skill initialization ---
-SKILL_DIR = Path(__file__).resolve().parent / "skills" / "pave-skill"
-
-qd_engine.init_skill(SKILL_DIR)
-az_engine.init_skill(SKILL_DIR)
-ip_engine.init_skill(SKILL_DIR)
+from pave_agent.tools.query_data import query_data
+from pave_agent.tools.analyze import analyze
+from pave_agent.tools.interpret import interpret
 
 # --- PAVE orchestrator instruction ---
 INSTRUCTION = """\
