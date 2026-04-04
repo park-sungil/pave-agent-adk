@@ -3,12 +3,21 @@
 ADK entry point. Run with: adk web .
 """
 
+import logging
+
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.lite_llm import LiteLlm
 
 from pave_agent import settings
 from pave_agent.prompts import INSTRUCTION
+
+_log = logging.getLogger("pave_agent")
+_log.setLevel(getattr(logging, settings.LOG_LEVEL, logging.INFO))
+if not _log.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    _log.addHandler(_h)
 from pave_agent.tools.query_data import query_data
 from pave_agent.tools.analyze import analyze
 from pave_agent.tools.interpret import interpret

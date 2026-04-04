@@ -19,12 +19,29 @@ _VERSION_TABLE = "ANTSDB.PAVE_PDK_VERSION_VIEW"
 _PPA_TABLE = "ANTSDB.PAVE_PPA_DATA_VIEW"
 _VERSION_CACHE_KEY = f"_cache_{_VERSION_TABLE}"
 
+_PPA_SQL = f"""\
+SELECT PDK_ID, CELL, DS, CORNER, TEMP, VDD, VTH,
+       FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM,
+       S_POWER, IDDQ_NA, WNS, WNS_VAL, CH, CH_TYPE
+FROM {_PPA_TABLE}
+WHERE PDK_ID = :pdk_id"""
+
+_VERSION_SQL = f"""\
+SELECT PDK_ID, PROCESS, PROJECT, PROJECT_NAME, MASK, DK_GDS,
+       VDD_NOMINAL, HSPICE, LVS, PEX, CREATED_AT, CREATED_BY
+FROM {_VERSION_TABLE}
+WHERE (PROJECT, MASK, DK_GDS, HSPICE, LVS, PEX, CREATED_AT) IN (
+    SELECT PROJECT, MASK, DK_GDS, HSPICE, LVS, PEX, MAX(CREATED_AT)
+    FROM {_VERSION_TABLE}
+    GROUP BY PROJECT, MASK, DK_GDS, HSPICE, LVS, PEX
+)"""
+
 _PDK_FILTER_KEYS = {"process", "project", "project_name", "mask", "dk_gds"}
 _TOOL_VERSION_KEYS = {"hspice", "lvs", "pex"}
 _PPA_FILTER_KEYS = {"cell", "corner", "temp", "vdd", "vth", "ds", "wns", "ch"}
 _CANDIDATE_COLUMNS = [
     "PDK_ID", "PROCESS", "PROJECT_NAME", "MASK", "DK_GDS",
-    "IS_GOLDEN", "VDD_NOMINAL", "HSPICE", "LVS", "PEX",
+    "VDD_NOMINAL", "HSPICE", "LVS", "PEX",
     "CREATED_AT", "CREATED_BY",
 ]
 
@@ -32,9 +49,9 @@ _CANDIDATE_COLUMNS = [
 def load_versions(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Load all PDK versions into session state (called once at session start)."""
     if _VERSION_CACHE_KEY not in state:
-        state[_VERSION_CACHE_KEY] = oracle_client.execute_query(
-            f"SELECT * FROM {_VERSION_TABLE}"
-        )
+        logger.info("[init] Loading PDK versions from DB")
+        state[_VERSION_CACHE_KEY] = oracle_client.execute_query(_VERSION_SQL)
+        logger.info("[init] Loaded %d PDK versions", len(state[_VERSION_CACHE_KEY]))
     return state[_VERSION_CACHE_KEY]
 
 
@@ -112,7 +129,7 @@ def _query_ppa_data(
         if cache_key not in tool_context.state:
             logger.info("[SQL] loading full PPA for pdk_id=%s", pdk_id)
             tool_context.state[cache_key] = oracle_client.execute_query(
-                f"SELECT * FROM {_PPA_TABLE} WHERE PDK_ID = :pdk_id",
+                _PPA_SQL,
                 {"pdk_id": pdk_id},
             )
         rows = tool_context.state[cache_key]
@@ -212,12 +229,6 @@ def _resolve_pdks(
             rows = [r for r in rows if r.get(key.upper()) == val]
         if not rows:
             return {"status": "no_match", "available": {}}
-        rows = _dedup_by_created_at(rows)
-    else:
-        # Step 3: HSPICE/LVS/PEX not specified — use IS_GOLDEN
-        golden = [r for r in rows if r.get("IS_GOLDEN") == 1]
-        if golden:
-            rows = golden
 
     if not rows:
         return {"status": "no_match", "available": {}}
