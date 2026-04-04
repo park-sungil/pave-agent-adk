@@ -46,24 +46,11 @@
 ## SQL Templates
 
 PDK 선택(resolve_pdks)이 pdk_id를 확정한 뒤 PPA 데이터를 조회한다.
-pdk_id만 필수이고 나머지는 optional — filters에 없는 조건의 AND 줄은 엔진이 자동 제거한다.
+PDK당 전체 데이터를 1회 로드하여 세션에 캐싱하고, 이후 조건 필터링은 Python에서 수행한다.
 
 ### ppa_data
 ```sql
-SELECT CELL, DS, CORNER, TEMP, VDD, VTH,
-       FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM,
-       S_POWER, IDDQ_NA, WNS, WNS_VAL, CH, CH_TYPE
-FROM ANTSDB.PAVE_PPA_DATA_VIEW
-WHERE PDK_ID = :pdk_id
-  AND CELL = :cell
-  AND CORNER = :corner
-  AND TEMP = :temp
-  AND VDD = :vdd
-  AND VTH = :vth
-  AND DS = :ds
-  AND WNS = :wns
-  AND CH = :ch
-ORDER BY CELL, CORNER, TEMP, VDD
+SELECT * FROM ANTSDB.PAVE_PPA_DATA_VIEW WHERE PDK_ID = :pdk_id
 ```
 
 ## Entity Mapping
