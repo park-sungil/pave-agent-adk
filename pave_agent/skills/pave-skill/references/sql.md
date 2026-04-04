@@ -6,9 +6,9 @@
 
 | Column | Type | Description |
 |--------|------|-------------|
-| PAVE_PDK_ID | NUMBER | PDK 고유 ID (PK) |
-| PROCESS | VARCHAR2 | 공정명 (e.g., LN04LPP, LN04LPE, SF3) |
-| PROJECT | VARCHAR2 | 프로젝트 코드 (e.g., S5E9945) |
+| PDK_ID | NUMBER | PDK 고유 ID (PK) |
+| PROCESS | VARCHAR2 | 공정명 (e.g., SF3, SF2, SF2P, SF2PP) |
+| PROJECT | VARCHAR2 | 프로젝트 코드 (e.g., S5E9955, S5E9965) |
 | PROJECT_NAME | VARCHAR2 | 프로젝트 별명 (e.g., Solomon, Thetis) |
 | MASK | VARCHAR2 | 마스크 버전 (e.g., EVT0, EVT1) |
 | DK_GDS | VARCHAR2 | DK GDS |
@@ -24,16 +24,16 @@
 
 | Column | Type | Description |
 |--------|------|-------------|
-| PDK_ID | NUMBER | FK → ANTSDB.PAVE_PDK_VERSION_VIEW.PAVE_PDK_ID |
+| PDK_ID | NUMBER | FK → ANTSDB.PAVE_PDK_VERSION_VIEW.PDK_ID |
 | CELL | VARCHAR2 | 셀 타입 (INV, ND2, NR2) |
-| DS | VARCHAR2 | Drive Strength (D1, D2, D3, D4) |
-| CORNER | VARCHAR2 | Process corner (TT, FF, SS, SF, FS, SSPG) |
+| DS | VARCHAR2 | Drive Strength (D1, D2, D4) |
+| CORNER | VARCHAR2 | Process corner (TT, SSPG) |
 | TEMP | NUMBER | 측정 온도 (°C) |
 | VDD | NUMBER | 공급 전압 (V) |
-| VTH | VARCHAR2 | Threshold Voltage 타입 (ULVT, SLVT, LVT, MVT, RVT, HVT) |
+| VTH | VARCHAR2 | Threshold Voltage 타입 (ULVT, SLVT, VLVT, LVT, MVT, RVT, HVT) |
 | WNS | VARCHAR2 | Nanosheet Width (N1~N5) |
 | WNS_VAL | NUMBER | Nanosheet Width 값 (nm) |
-| CH | VARCHAR2 | Cell Height (e.g., CH138, CH168, CH200) |
+| CH | VARCHAR2 | Cell Height (e.g., CH138, CH148, CH168, CH200) |
 | CH_TYPE | VARCHAR2 | Cell Height 타입 (uHD, HD, HP) |
 | FREQ_GHZ | NUMBER | RO 발진 주파수 (GHz) — 성능 대표 지표 |
 | D_POWER | NUMBER | 동적 전력 (mW) |
@@ -43,68 +43,42 @@
 | S_POWER | NUMBER | 정적(누설) 전력 (mW) |
 | IDDQ_NA | NUMBER | IDDQ 누설전류 (nA) |
 
-## 조인 관계
-
-```sql
--- 두 View 조인
-SELECT v.PROJECT, v.MASK, d.CELL, d.FREQ_GHZ
-FROM ANTSDB.PAVE_PPA_DATA_VIEW d
-JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
-WHERE v.PROJECT = :project
-```
-
 ## SQL Templates
 
-### single_cell
-```sql
-SELECT d.CELL, d.DS, d.CORNER, d.TEMP, d.VDD, d.VTH,
-       d.FREQ_GHZ, d.D_POWER, d.D_ENERGY, d.ACCEFF_FF, d.ACREFF_KOHM,
-       d.S_POWER, d.IDDQ_NA, d.WNS, d.CH, d.CH_TYPE
-FROM ANTSDB.PAVE_PPA_DATA_VIEW d
-JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
-WHERE v.PROJECT = :project
-  AND d.CELL = :cell
-  AND d.PDK_ID = :pdk_id
-ORDER BY d.CELL, d.CORNER
-```
+PDK 선택(resolve_pdks)이 pdk_id를 확정한 뒤 PPA 데이터를 조회한다.
+pdk_id만 필수이고 나머지는 optional — filters에 없는 조건의 AND 줄은 엔진이 자동 제거한다.
 
-### compare_cells
+### ppa_data
 ```sql
-SELECT d.CELL, d.DS, d.CORNER, d.TEMP, d.VDD, d.VTH,
-       d.FREQ_GHZ, d.D_POWER, d.S_POWER, d.IDDQ_NA
-FROM ANTSDB.PAVE_PPA_DATA_VIEW d
-JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
-WHERE v.PROJECT = :project
-  AND d.CELL IN ({cell_placeholders})
-  AND d.PDK_ID = :pdk_id
-ORDER BY d.CELL, d.DS
-```
-
-### trend
-```sql
-SELECT v.PAVE_PDK_ID, v.MASK, v.HSPICE, v.CREATED_AT,
-       d.CELL, d.DS, d.CORNER, d.TEMP, d.VDD,
-       d.FREQ_GHZ, d.D_POWER, d.S_POWER, d.IDDQ_NA
-FROM ANTSDB.PAVE_PPA_DATA_VIEW d
-JOIN ANTSDB.PAVE_PDK_VERSION_VIEW v ON d.PDK_ID = v.PAVE_PDK_ID
-WHERE v.PROJECT = :project
-  AND d.CELL = :cell
-ORDER BY v.CREATED_AT, d.CELL
+SELECT CELL, DS, CORNER, TEMP, VDD, VTH,
+       FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM,
+       S_POWER, IDDQ_NA, WNS, WNS_VAL, CH, CH_TYPE
+FROM ANTSDB.PAVE_PPA_DATA_VIEW
+WHERE PDK_ID = :pdk_id
+  AND CELL = :cell
+  AND CORNER = :corner
+  AND TEMP = :temp
+  AND VDD = :vdd
+  AND VTH = :vth
+  AND DS = :ds
+  AND WNS = :wns
+  AND CH = :ch
+ORDER BY CELL, CORNER, TEMP, VDD
 ```
 
 ## Entity Mapping
 
 | 사용자 표현 | 매핑 대상 | 예시 |
 |-------------|-----------|------|
-| 공정, 공정명, 프로세스 | PROCESS | LN04LPP, LN04LPE, SF3 |
-| 프로젝트, 과제 | PROJECT / PROJECT_NAME | S5E9945, Solomon |
+| 공정, 공정명, 프로세스 | PROCESS | SF3, SF2, SF2P, SF2PP |
+| 프로젝트, 과제 | PROJECT / PROJECT_NAME | S5E9955, Solomon |
 | 마스크 | MASK | EVT0, EVT1 |
 | 셀, 셀 타입 | CELL | INV, ND2, NR2 |
-| DS, 드라이브 스트렝스 | DS | D1, D2, D3, D4 |
-| 코너, 공정 코너 | CORNER | TT, FF, SS |
+| DS, 드라이브 스트렝스 | DS | D1, D2, D4 |
+| 코너, 공정 코너 | CORNER | TT, SSPG |
 | 온도 | TEMP | -25, 25, 125 |
-| 전압, VDD | VDD | 0.5, 0.72, 0.75 |
-| Vth 타입 | VTH | ULVT, SLVT, LVT, MVT, RVT, HVT |
+| 전압, VDD | VDD | 0.540, 0.720, 0.880 |
+| Vth 타입 | VTH | ULVT, SLVT, VLVT, LVT, MVT, RVT, HVT |
 | 주파수, freq | FREQ_GHZ | |
 | 동적 전력, d_power | D_POWER | |
 | 정적 전력, 누설 전력, s_power | S_POWER | |
@@ -121,8 +95,8 @@ ORDER BY v.CREATED_AT, d.CELL
 ## PDK Version Structure & Selection Logic
 
 ### 컬럼 계층 구조
-PROCESS (공정명, 예: SF3, SF2P)
-  └─ 1:N ─► PROJECT / PROJECT_NAME (내부 코드 / 별명, 예: S5E9945 / Thetis)
+PROCESS (공정명, 예: SF3, SF2, SF2P, SF2PP)
+  └─ 1:N ─► PROJECT / PROJECT_NAME (내부 코드 / 별명, 예: S5E9965 / Thetis)
                 └─ 1:N ─► MASK (테이프아웃 단계, 예: EVT0, EVT1)
                               └─ 1:N ─► DK_GDS (디자인 킷 GDS 버전)
                                             └─ 1:N ─► HSPICE / LVS / PEX (도구 버전)
@@ -131,9 +105,9 @@ PROCESS (공정명, 예: SF3, SF2P)
 
 | 컬럼 | 의미 | 사용자 언급 빈도 |
 |------|------|----------------|
-| PROCESS | 공정명 (SF3, SF2P…) | 높음 — 대화 진입점 |
-| PROJECT | 내부 프로젝트 코드 (S5E9945…) | 낮음 |
-| PROJECT_NAME | 프로젝트 별명 (Root, Thetis, Solomon…) | 중간 |
+| PROCESS | 공정명 (SF3, SF2, SF2P, SF2PP) | 높음 — 대화 진입점 |
+| PROJECT | 내부 프로젝트 코드 (S5E9955, S5E9965…) | 낮음 |
+| PROJECT_NAME | 프로젝트 별명 (Solomon, Thetis, Ulysses, Vanguard) | 중간 |
 | MASK | 테이프아웃 단계 (EVT0, EVT1) | 중간 |
 | DK_GDS | 디자인 킷 GDS 설정 | 낮음 |
 | HSPICE / LVS / PEX | 도구 버전 — 하나라도 바뀌면 PPA 결과가 달라짐 | 낮음 |
@@ -160,7 +134,7 @@ Step 3 — HSPICE/LVS/PEX 미명시 (일반적 케이스):
 즉, 동일 (PROJECT, MASK)에 DK_GDS 변형이 여러 개이고 각각 IS_GOLDEN이 있는 경우.
 
 ### 반환 형식
-- 1행 → 확정, PAVE_PDK_ID로 PPA 데이터 조회
+- 1행 → 확정, PDK_ID로 PPA 데이터 조회
 - 여러 행 → 후보 목록 반환, 오케스트레이터가 사용자에게 선택 요청
 - 0행 → 에러 + 가능한 옵션 제시
 

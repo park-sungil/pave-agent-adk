@@ -3,3 +3,5 @@
 - [Process node mapping](project_node_mapping.md) — 2nm→SF2/SF2P/SF2PP, 3nm→SF3. DB에 없는 매핑.
 - [Query pattern rules](feedback_query_patterns.md) — 질문 패턴 규칙. 전체 데이터 반환 시 기본 조건 미정(TODO).
 - [TODO list](project_todo.md) — 미결정 사항 + 다음 작업 목록.
+- [Response style](feedback_response_style.md) — 버전 목록은 테이블만, PPA 데이터는 설명 포함 (추후 프롬프팅).
+- [Skill review](project_skill_review.md) — pave-skill 리뷰 결과 9개 항목. sql.md부터 수정.

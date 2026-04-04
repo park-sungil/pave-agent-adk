@@ -85,7 +85,8 @@ def query_data(
                     f"SELECT * FROM {cache_table}"
                 )
             all_rows = tool_context.state[cache_key]
-            results = _filter_rows(all_rows, filters)
+            filtered = _filter_rows(all_rows, filters)
+            results = [{"IDX": i, **row} for i, row in enumerate(filtered, 1)]
             return {"data": results, "count": len(results), "query_type": query_type}
 
         # --- SQL template queries: resolve PDK first ---
@@ -119,30 +120,55 @@ def query_data(
         elif needs_pdk:
             pdk_ids = [filters["pdk_id"]] if "pdk_id" in filters else []
         else:
-            # Template doesn't need pdk_id (e.g., trend) — execute directly
+            # Template doesn't need pdk_id — execute directly
             params, format_args = _build_params(template, filters)
             sql = template.format(**format_args)
+            sql = _strip_optional_clauses(sql, params)
             logger.info("[SQL] query_type=%s\n%s\nparams=%s", query_type, sql, params)
             results = oracle_client.execute_query(sql, params)
             return {"data": results, "count": len(results), "query_type": query_type}
 
-        # Execute SQL for each resolved PDK
+        # Execute SQL for each resolved PDK, store in session state per pdk_id
         all_results: list[dict[str, Any]] = []
         for pdk_id in pdk_ids:
             params, format_args = _build_params(template, {**filters, "pdk_id": pdk_id})
             sql = template.format(**format_args)
+            sql = _strip_optional_clauses(sql, params)
             logger.info("[SQL] query_type=%s pdk_id=%s\n%s\nparams=%s", query_type, pdk_id, sql, params)
-            all_results.extend(oracle_client.execute_query(sql, params))
+            rows = oracle_client.execute_query(sql, params)
+            tool_context.state[f"_ppa_data_{pdk_id}"] = rows
+            all_results.extend(rows)
 
-        return {
-            "data": all_results,
-            "count": len(all_results),
-            "query_type": query_type,
-        }
+        return _summarize(all_results, pdk_ids)
 
     except Exception as e:
         logger.error("query_data failed: %s", e, exc_info=True)
         return {"error": str(e)}
+
+
+def _summarize(
+    rows: list[dict[str, Any]],
+    pdk_ids: list[int],
+) -> dict[str, Any]:
+    """Return a summary instead of raw data to keep LLM context small.
+
+    Full data is stored in session state as _ppa_data_{pdk_id}.
+    """
+    if not rows:
+        return {"count": 0, "pdk_ids": pdk_ids, "message": "조회 결과 없음."}
+
+    unique = {}
+    for col in ("CELL", "CORNER", "TEMP", "VDD", "VTH", "DS", "CH"):
+        vals = sorted({str(r[col]) for r in rows if col in r})
+        if vals:
+            unique[col] = vals
+
+    return {
+        "count": len(rows),
+        "pdk_ids": pdk_ids,
+        "unique_values": unique,
+        "message": f"{len(rows)}건 조회됨. analyze에 pdk_ids를 전달하세요.",
+    }
 
 
 def _filter_rows(
@@ -179,7 +205,11 @@ def _filter_rows(
 
 _PDK_FILTER_KEYS = {"process", "project", "project_name", "mask", "dk_gds"}
 _TOOL_VERSION_KEYS = {"hspice", "lvs", "pex"}
-_CANDIDATE_COLUMNS = ["PAVE_PDK_ID", "PROCESS", "PROJECT_NAME", "MASK", "DK_GDS", "HSPICE", "LVS", "PEX"]
+_CANDIDATE_COLUMNS = [
+    "PDK_ID", "PROCESS", "PROJECT_NAME", "MASK", "DK_GDS",
+    "IS_GOLDEN", "VDD_NOMINAL", "HSPICE", "LVS", "PEX",
+    "CREATED_AT", "CREATED_BY",
+]
 
 
 def _resolve_pdks(
@@ -203,7 +233,10 @@ def _resolve_pdks(
         if val is None:
             continue
         upper_key = key.upper()
-        rows = [r for r in rows if r.get(upper_key) == val]
+        if upper_key in ("PROJECT", "PROJECT_NAME"):
+            rows = [r for r in rows if r.get("PROJECT") == val or r.get("PROJECT_NAME") == val]
+        else:
+            rows = [r for r in rows if r.get(upper_key) == val]
 
     if not rows:
         available_projects = sorted({r.get("PROJECT_NAME", "") for r in cached_versions})
@@ -228,7 +261,7 @@ def _resolve_pdks(
         return {"status": "no_match", "available": {}}
 
     if len(rows) == 1:
-        return {"status": "resolved", "pdk_ids": [rows[0]["PAVE_PDK_ID"]]}
+        return {"status": "resolved", "pdk_ids": [rows[0]["PDK_ID"]]}
 
     # Multiple rows: check if ambiguous (same PROJECT+MASK, different DK_GDS)
     # Different MASKs = all resolved (return all pdk_ids)
@@ -244,7 +277,7 @@ def _resolve_pdks(
         return {"status": "candidates", "candidates": candidates}
 
     # All rows are from different (PROJECT, MASK) — all resolved
-    return {"status": "resolved", "pdk_ids": [r["PAVE_PDK_ID"] for r in rows]}
+    return {"status": "resolved", "pdk_ids": [r["PDK_ID"] for r in rows]}
 
 
 def _dedup_by_created_at(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -288,16 +321,23 @@ def _build_params(
         else:
             params[lower_key] = value
 
-    # Handle {cell_placeholders} — if not already set by list expansion
-    if "{cell_placeholders}" in template and "cell_placeholders" not in format_args:
-        if "cells" in filters and isinstance(filters["cells"], list):
-            placeholders = ", ".join(f":cells_{i}" for i in range(len(filters["cells"])))
-            for i, v in enumerate(filters["cells"]):
-                params[f"cells_{i}"] = v
-            format_args["cell_placeholders"] = placeholders
-        elif "cell" in params:
-            # single cell for compare
-            params["cell_0"] = params.pop("cell")
-            format_args["cell_placeholders"] = ":cell_0"
-
     return params, format_args
+
+
+def _strip_optional_clauses(sql: str, params: dict[str, Any]) -> str:
+    """Remove AND clauses whose bind variables are not in params.
+
+    For the ppa_data template, only :pdk_id is required. All other AND lines
+    (e.g., AND CELL = :cell) are stripped if the corresponding filter wasn't provided.
+    This lets one template handle any combination of filters.
+    """
+    lines = sql.split("\n")
+    result = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.upper().startswith("AND"):
+            bind_vars = re.findall(r":(\w+)", stripped)
+            if bind_vars and any(v not in params for v in bind_vars):
+                continue
+        result.append(line)
+    return "\n".join(result)
