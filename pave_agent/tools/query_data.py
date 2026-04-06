@@ -180,7 +180,7 @@ def _summarize(
         return {"count": 0, "pdk_ids": pdk_ids, "message": "조회 결과 없음."}
 
     unique = {}
-    for col in ("CELL", "CORNER", "TEMP", "VDD", "VTH", "DS", "CH"):
+    for col in ("CELL", "CORNER", "TEMP", "VDD", "VTH", "DS", "WNS", "CH"):
         vals = sorted({str(r[col]) for r in rows if col in r})
         if vals:
             unique[col] = vals

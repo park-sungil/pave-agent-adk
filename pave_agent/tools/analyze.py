@@ -88,7 +88,7 @@ def analyze(
     pdk_counts = {pid: sum(1 for r in data if r["PDK_ID"] == pid) for pid in pdk_ids}
 
     unique = {}
-    for col in ("CELL", "CORNER", "TEMP", "VDD", "VTH", "DS", "CH"):
+    for col in ("CELL", "CORNER", "TEMP", "VDD", "VTH", "DS", "WNS", "CH"):
         vals = sorted({str(r[col]) for r in data if col in r})
         if vals:
             unique[col] = vals
