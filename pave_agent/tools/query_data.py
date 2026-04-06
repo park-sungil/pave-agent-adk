@@ -110,7 +110,7 @@ def _query_ppa_data(
     if resolve_result["status"] == "candidates":
         return {
             "candidates": resolve_result["candidates"],
-            "message": "PDK 버전을 선택해주세요.",
+            "message": "PDK 버전이 여러 개입니다. 아래 목록을 사용자에게 테이블로 보여주고 번호로 선택을 요청하세요. 사용자가 선택하면 해당 PDK_ID로 query_data('ppa_data', {'pdk_id': 선택된_ID})를 다시 호출하세요.",
         }
     elif resolve_result["status"] == "no_match":
         return {
