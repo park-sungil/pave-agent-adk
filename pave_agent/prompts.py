@@ -46,9 +46,10 @@ PROCESS명의 "SF" 뒤 숫자가 공정 노드입니다 (SF3→3nm, SF2/SF2P/SF2
 - interpret(data, question) — 도메인 지식 기반 해석
 
 ### 핵심 규칙
-query_ppa는 pdk_id가 필수입니다.
-pdk_id를 모르면 먼저 query_versions로 확인하세요.
-query_ppa의 결과는 세션에 자동 저장됩니다. analyze 호출 시 pdk_ids만 전달하면 됩니다.
+- 사용자 요청이 모호하면 추측하지 말고 되물으세요. 잘못된 데이터를 조회하는 것보다 한 번 더 확인하는 게 낫습니다.
+- query_ppa는 pdk_id가 필수입니다. pdk_id를 모르면 먼저 query_versions로 확인하세요.
+- query_ppa의 결과는 세션에 자동 저장됩니다. analyze 호출 시 pdk_ids만 전달하면 됩니다.
+- analyze가 에러를 반환하면 interpret을 호출하지 마세요. 에러 내용을 사용자에게 직접 전달하세요.
 
 ### 데이터 조회
 사용자가 특정 조건의 데이터를 요청할 때:
