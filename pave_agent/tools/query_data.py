@@ -205,12 +205,21 @@ def _filter_rows(
         return rows
     all_cols = list(rows[0].keys())
 
+    def _eq(a: Any, b: Any) -> bool:
+        """Compare values, falling back to float comparison for numeric strings."""
+        if a == b:
+            return True
+        try:
+            return float(a) == float(b)
+        except (ValueError, TypeError):
+            return False
+
     def _matches(row: dict, key: str, val: Any) -> bool:
         cols = [c for c in all_cols if c.startswith(key)]
         if not cols:
             return True
         return any(
-            row.get(c) == val or (isinstance(val, list) and row.get(c) in val)
+            _eq(row.get(c), val) or (isinstance(val, list) and any(_eq(row.get(c), v) for v in val))
             for c in cols
         )
 
