@@ -74,6 +74,7 @@ def query_data(
         error: {"error": str}
     """
     filters = filters if isinstance(filters, dict) else {}
+    logger.info("[query_data] query_type=%s, filters=%s", query_type, filters)
 
     try:
         if query_type == "versions":
