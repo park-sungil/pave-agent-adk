@@ -53,9 +53,9 @@ def _seed(conn: sqlite3.Connection) -> None:
     ppa_rows = _generate_ppa_data()
     conn.executemany(
         """INSERT INTO PAVE_PPA_DATA_VIEW
-           (PDK_ID, CELL, DS, CORNER, TEMP, VDD, VTH, WNS, WNS_VAL, CH, CH_TYPE,
+           (PDK_ID, CELL, DS, CORNER, TEMP, VDD, VDD_TYPE, VTH, WNS, WNS_VAL, CH, CH_TYPE,
             FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM, S_POWER, IDDQ_NA)
-           VALUES (:PDK_ID, :CELL, :DS, :CORNER, :TEMP, :VDD, :VTH, :WNS, :WNS_VAL, :CH, :CH_TYPE,
+           VALUES (:PDK_ID, :CELL, :DS, :CORNER, :TEMP, :VDD, :VDD_TYPE, :VTH, :WNS, :WNS_VAL, :CH, :CH_TYPE,
                    :FREQ_GHZ, :D_POWER, :D_ENERGY, :ACCEFF_FF, :ACREFF_KOHM, :S_POWER, :IDDQ_NA)""",
         ppa_rows,
     )
@@ -88,8 +88,9 @@ CREATE TABLE PAVE_PPA_DATA_VIEW (
     CELL         TEXT NOT NULL,
     DS           TEXT NOT NULL,
     CORNER       TEXT NOT NULL,
-    TEMP         INTEGER NOT NULL,
-    VDD          REAL NOT NULL,
+    TEMP         TEXT NOT NULL,
+    VDD          TEXT NOT NULL,
+    VDD_TYPE     TEXT,
     VTH          TEXT NOT NULL,
     WNS          TEXT,
     WNS_VAL      REAL,
@@ -133,7 +134,8 @@ _SEED_PDK_VERSION = [
 # PPA data generation — full cross product with realistic values
 # ---------------------------------------------------------------------------
 
-# VDD ratios (VDD type: UUD, SUD, UD, ND, OD, SOD)
+# VDD ratios and types
+_VDD_TYPES = ["UUD", "SUD", "UD", "NM", "OD", "SOD"]
 _VDD_RATIOS = [0.75, 0.833, 0.903, 1.0, 1.111, 1.222]
 _VDD_BASE = {"TT": 0.72, "SSPG": 0.76}
 
@@ -200,9 +202,13 @@ def _generate_ppa_data() -> list[dict]:
 
         for corner in _CORNERS:
             vdd_base = _VDD_BASE[corner]
-            vdd_list = [round(vdd_base * r, 3) for r in _VDD_RATIOS]
+            vdd_pairs = [
+                (round(vdd_base * r, 3), vdd_type)
+                for r, vdd_type in zip(_VDD_RATIOS, _VDD_TYPES)
+            ]
 
-            for vdd in vdd_list:
+            for vdd_num, vdd_type in vdd_pairs:
+                vdd = vdd_num
                 vdd_freq = (vdd / _VDD_NOM) ** 1.3
                 vdd_power = (vdd / _VDD_NOM) ** 2
                 vdd_leak = math.exp(3.5 * (vdd - _VDD_NOM))
@@ -277,13 +283,19 @@ def _generate_ppa_data() -> list[dict]:
 
                                         iddq = s_power / vdd * 1e3
 
+                                        # Format VDD like real DB: strip leading zero
+                                        vdd_str = f"{vdd:g}"
+                                        if vdd_str.startswith("0."):
+                                            vdd_str = vdd_str[1:]  # "0.54" → ".54"
+
                                         rows.append({
                                             "PDK_ID": pdk_id,
                                             "CELL": cell,
                                             "DS": ds,
                                             "CORNER": corner,
-                                            "TEMP": temp,
-                                            "VDD": vdd,
+                                            "TEMP": str(temp),
+                                            "VDD": vdd_str,
+                                            "VDD_TYPE": vdd_type,
                                             "VTH": vth,
                                             "WNS": wns,
                                             "WNS_VAL": _WNS_VAL[wns],

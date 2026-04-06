@@ -73,13 +73,36 @@ def execute(code: str, data: list[dict[str, Any]]) -> dict[str, Any]:
     try:
         exec(code, namespace)  # noqa: S102
         return {
-            "result": namespace.get("result", {}),
+            "result": _to_native(namespace.get("result", {})),
             "charts": namespace.get("charts", []),
         }
     except Exception:
         error_msg = traceback.format_exc()
         logger.error("Code execution failed:\n%s", error_msg)
         return {"error": error_msg}
+
+
+def _to_native(obj: Any) -> Any:
+    """Convert numpy/pandas types to JSON-serializable Python native types."""
+    import numpy as np
+
+    if isinstance(obj, dict):
+        return {_to_native(k): _to_native(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_to_native(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_to_native(v) for v in obj)
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if hasattr(obj, "item"):  # scalar numpy
+        return obj.item()
+    return obj
 
 
 def _safe_builtins() -> dict[str, Any]:
