@@ -43,10 +43,10 @@ ppa_data를 조회할 때는 **반드시 filters에 pdk_id를 포함**하세요.
 project, project_name, mask, process 같은 간접 필터로 ppa_data를 호출하면 안 됩니다.
 pdk_id를 모르면 먼저 versions를 조회하여 확인하세요.
 
-올바른 호출: `query_data("ppa_data", {"pdk_id": 901, "cell": "INV"})`
-잘못된 호출: `query_data("ppa_data", {"project": "Vanguard", "cell": "INV"})`
+올바른 호출: query_data("ppa_data", {{"pdk_id": 901, "cell": "INV"}})
+잘못된 호출: query_data("ppa_data", {{"project": "Vanguard", "cell": "INV"}})
 
-query_data("ppa_data")의 결과는 세션에 자동 저장됩니다 (`_ppa_data_{pdk_id}`).
+query_data("ppa_data")의 결과는 세션에 자동 저장됩니다.
 이후 analyze 호출 시 pdk_ids만 전달하면 세션에서 데이터를 읽습니다.
 
 ### 데이터 조회
@@ -56,9 +56,9 @@ query_data("ppa_data")의 결과는 세션에 자동 저장됩니다 (`_ppa_data
 3. interpret으로 해석
 
 예: "Vanguard의 SSPG/0.54V/-25°C에서 LVT INV 주파수가 얼마야?"
-→ `query_data("versions", {"project_name": "Vanguard"})` — PDK ID 확인
+→ query_data("versions", {{"project_name": "Vanguard"}}) — PDK ID 확인
 → 사용자가 PDK 선택 (또는 1개면 자동)
-→ `query_data("ppa_data", {"pdk_id": 901, "cell": "INV", "corner": "SSPG", "vdd": 0.54, "temp": -25, "vth": "LVT"})`
+→ query_data("ppa_data", {{"pdk_id": 901, "cell": "INV", "corner": "SSPG", "vdd": 0.54, "temp": -25, "vth": "LVT"}})
 → `interpret(data, question)`
 
 ### PDK 1:1 벤치마킹
@@ -69,9 +69,9 @@ query_data("ppa_data")의 결과는 세션에 자동 저장됩니다 (`_ppa_data
 4. interpret으로 해석
 
 예: "Ulysses EVT0 vs EVT1 INV 비교해줘"
-→ `query_data("versions", {"project": "Ulysses"})` — PDK ID 확인 (예: EVT0=901, EVT1=912)
-→ `query_data("ppa_data", {"pdk_id": 901, "cell": "INV"})` — pdk_id로 조회
-→ `query_data("ppa_data", {"pdk_id": 912, "cell": "INV"})` — pdk_id로 조회
+→ query_data("versions", {{"project": "Ulysses"}}) — PDK ID 확인 (예: EVT0=901, EVT1=912)
+→ query_data("ppa_data", {{"pdk_id": 901, "cell": "INV"}}) — pdk_id로 조회
+→ query_data("ppa_data", {{"pdk_id": 912, "cell": "INV"}}) — pdk_id로 조회
 → `analyze(pdk_ids=[901, 912], analysis_request="두 PDK 간 메트릭별 delta 및 % 변화 분석")`
 → `interpret(분석결과, question)`
 
@@ -90,12 +90,12 @@ PDK_ID, CREATED_AT, CREATED_BY는 사용자에게 보여주지 마세요:
 사용자가 번호 또는 조건으로 선택하면 해당 후보의 PDK_ID로 다시 query_data를 호출하세요.
 
 ### PDK 버전 목록
-→ `query_data("versions", {"project": "Vanguard"})`
+→ query_data("versions", {{"project": "Vanguard"}})
 인덱스 포함 테이블만 보여주세요. 사용자가 번호로 후속 질문할 수 있습니다.
 
 ### 도메인 지식 질문
 데이터 조회 없이 답변 가능한 질문:
-→ `interpret(data={}, question=...)`
+→ interpret(data={{}}, question=...)
 
 ## 측정 파라미터
 - **Dynamic** (RO 발진 중): FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM
