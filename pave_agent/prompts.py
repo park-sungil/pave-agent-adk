@@ -38,25 +38,40 @@ PROCESS명의 "SF" 뒤 숫자가 공정 노드입니다 (SF3→3nm, SF2/SF2P/SF2
 
 ## 도구 호출 가이드
 
+### 핵심 규칙: ppa_data 조회 시 반드시 pdk_id 사용
+ppa_data를 조회할 때는 **반드시 filters에 pdk_id를 포함**하세요.
+project, project_name, mask, process 같은 간접 필터로 ppa_data를 호출하면 안 됩니다.
+pdk_id를 모르면 먼저 versions를 조회하여 확인하세요.
+
+올바른 호출: `query_data("ppa_data", {"pdk_id": 901, "cell": "INV"})`
+잘못된 호출: `query_data("ppa_data", {"project": "Vanguard", "cell": "INV"})`
+
+query_data("ppa_data")의 결과는 세션에 자동 저장됩니다 (`_ppa_data_{pdk_id}`).
+이후 analyze 호출 시 pdk_ids만 전달하면 세션에서 데이터를 읽습니다.
+
 ### 데이터 조회
 사용자가 특정 조건의 데이터를 요청할 때:
-→ `query_data("ppa_data", filters)` → `interpret(data, question)`
+1. versions 조회로 PDK ID 확인
+2. pdk_id로 ppa_data 조회
+3. interpret으로 해석
 
 예: "Vanguard의 SSPG/0.54V/-25°C에서 LVT INV 주파수가 얼마야?"
-→ `query_data("ppa_data", {"project": "Vanguard", "cell": "INV", "corner": "SSPG", "vdd": 0.54, "temp": -25, "vth": "LVT"})`
+→ `query_data("versions", {"project_name": "Vanguard"})` — PDK ID 확인
+→ 사용자가 PDK 선택 (또는 1개면 자동)
+→ `query_data("ppa_data", {"pdk_id": 901, "cell": "INV", "corner": "SSPG", "vdd": 0.54, "temp": -25, "vth": "LVT"})`
 → `interpret(data, question)`
 
 ### PDK 1:1 벤치마킹
 두 PDK 버전의 PPA를 비교할 때:
 1. versions 조회로 비교 대상 PDK ID 확인
-2. 각각 query_data로 데이터 조회
+2. **pdk_id를 사용하여** 각각 ppa_data 조회
 3. analyze로 delta/% 변화 분석
 4. interpret으로 해석
 
 예: "Ulysses EVT0 vs EVT1 INV 비교해줘"
-→ `query_data("versions", {"project": "Ulysses"})` — PDK ID 확인
-→ `query_data("ppa_data", {"pdk_id": 901, "cell": "INV"})` — 세션에 저장됨
-→ `query_data("ppa_data", {"pdk_id": 912, "cell": "INV"})` — 세션에 저장됨
+→ `query_data("versions", {"project": "Ulysses"})` — PDK ID 확인 (예: EVT0=901, EVT1=912)
+→ `query_data("ppa_data", {"pdk_id": 901, "cell": "INV"})` — pdk_id로 조회
+→ `query_data("ppa_data", {"pdk_id": 912, "cell": "INV"})` — pdk_id로 조회
 → `analyze(pdk_ids=[901, 912], analysis_request="두 PDK 간 메트릭별 delta 및 % 변화 분석")`
 → `interpret(분석결과, question)`
 
