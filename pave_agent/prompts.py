@@ -18,10 +18,14 @@ INSTRUCTION = """\
 | 코너, 공정 코너 | corner | TT, SSPG |
 | 온도 | temp | -25, 25, 125 |
 | 전압 | vdd | 0.54, 0.72, 0.88 |
+| 전압 타입 | vdd_type | UUD, SUD, UD, NM, OD, SOD |
 | Vth, flavor | vth | ULVT, SLVT, VLVT, LVT, MVT, RVT, HVT |
 | DS, 드라이브 스트렝스, D1, D2 등 | ds | D1, D2, D4 |
 | nanosheet width, N1, N2 등 | wns | N1, N2, N3, N4, N5 |
 | cell height, CH138 등 | ch | CH138, CH148, CH168, CH200 |
+| cell height 타입, HP/HD 등 | ch_type | HP, HD, uHD |
+
+vdd_type은 vdd에 대응하되, 매핑은 CORNER별로 다릅니다. ch_type은 ch에 1:1 대응합니다 (예: CH138=uHD, CH168=HD, CH200=HP).
 
 사용자가 "2nm", "3nm" 같은 공정 노드로 물어볼 수 있습니다.
 PROCESS명의 "SF" 뒤 숫자가 공정 노드입니다 (SF3→3nm, SF2/SF2P/SF2PP→2nm).

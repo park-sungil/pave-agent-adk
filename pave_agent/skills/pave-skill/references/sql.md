@@ -30,6 +30,7 @@
 | CORNER | VARCHAR2 | Process corner (TT, SSPG) |
 | TEMP | NUMBER | 측정 온도 (°C) |
 | VDD | NUMBER | 공급 전압 (V) |
+| VDD_TYPE | VARCHAR2 | 전압 타입 (UUD, SUD, UD, NM, OD, SOD). VDD와 대응하되, 매핑은 CORNER별로 다름 |
 | VTH | VARCHAR2 | Threshold Voltage 타입 (ULVT, SLVT, VLVT, LVT, MVT, RVT, HVT) |
 | WNS | VARCHAR2 | Nanosheet Width (N1~N5) |
 | WNS_VAL | NUMBER | Nanosheet Width 값 (nm) |
@@ -65,11 +66,13 @@ SELECT * FROM ANTSDB.PAVE_PPA_DATA_VIEW WHERE PDK_ID = :pdk_id
 | 코너, 공정 코너 | CORNER | TT, SSPG |
 | 온도 | TEMP | -25, 25, 125 |
 | 전압, VDD | VDD | 0.540, 0.720, 0.880 |
+| 전압 타입 | VDD_TYPE | UUD, SUD, UD, NM, OD, SOD |
 | Vth 타입 | VTH | ULVT, SLVT, VLVT, LVT, MVT, RVT, HVT |
 | 주파수, freq | FREQ_GHZ | |
 | 동적 전력, d_power | D_POWER | |
 | 정적 전력, 누설 전력, s_power | S_POWER | |
 | IDDQ, 누설전류 | IDDQ_NA | |
+| cell height 타입, HP/HD | CH_TYPE | HP, HD, uHD |
 
 ## Cache
 

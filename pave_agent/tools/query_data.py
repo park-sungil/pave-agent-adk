@@ -104,10 +104,12 @@ def query_ppa(
     corner: str | None = None,
     temp: float | None = None,
     vdd: float | None = None,
+    vdd_type: str | None = None,
     vth: str | None = None,
     ds: str | None = None,
     wns: str | None = None,
     ch: str | None = None,
+    ch_type: str | None = None,
 ) -> dict[str, Any]:
     """PPA 측정 데이터를 조회한다. pdk_id 필수.
 
@@ -120,17 +122,19 @@ def query_ppa(
         corner: 공정 코너 (예: TT, SSPG).
         temp: 온도 (예: -25, 25, 125).
         vdd: 전압 (예: 0.54, 0.72).
+        vdd_type: 전압 타입 (예: UUD, SUD, UD, NM, OD, SOD).
         vth: Vth flavor (예: LVT, HVT).
         ds: 드라이브 스트렝스 (예: D1, D2).
         wns: nanosheet width (예: N1, N2).
         ch: cell height (예: CH138, CH148).
+        ch_type: cell height 타입 (예: HP, HD, uHD).
 
     Returns:
         {"count": int, "pdk_ids": [...], "unique_values": {...}}
         세션에 _ppa_data_{pdk_id}로 저장됨.
     """
-    logger.info("[query_ppa] pdk_id=%s, cell=%s, corner=%s, temp=%s, vdd=%s, vth=%s, ds=%s, wns=%s, ch=%s",
-                pdk_id, cell, corner, temp, vdd, vth, ds, wns, ch)
+    logger.info("[query_ppa] pdk_id=%s, cell=%s, corner=%s, temp=%s, vdd=%s, vdd_type=%s, vth=%s, ds=%s, wns=%s, ch=%s, ch_type=%s",
+                pdk_id, cell, corner, temp, vdd, vdd_type, vth, ds, wns, ch, ch_type)
 
     try:
         ppa_filters: dict[str, Any] = {}
@@ -142,6 +146,8 @@ def query_ppa(
             ppa_filters["TEMP"] = temp
         if vdd is not None:
             ppa_filters["VDD"] = vdd
+        if vdd_type is not None:
+            ppa_filters["VDD_TYPE"] = vdd_type
         if vth is not None:
             ppa_filters["VTH"] = vth
         if ds is not None:
@@ -150,6 +156,8 @@ def query_ppa(
             ppa_filters["WNS"] = wns
         if ch is not None:
             ppa_filters["CH"] = ch
+        if ch_type is not None:
+            ppa_filters["CH_TYPE"] = ch_type
 
         cache_key = f"_ppa_data_{pdk_id}"
         if cache_key not in tool_context.state:
