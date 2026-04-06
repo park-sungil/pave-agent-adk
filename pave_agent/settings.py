@@ -9,6 +9,8 @@ load_dotenv()
 
 # LLM
 LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/glm-4.7")
+LLM_MODEL_ANALYZE: str = os.getenv("LLM_MODEL_ANALYZE", "") or LLM_MODEL
+LLM_MODEL_INTERPRET: str = os.getenv("LLM_MODEL_INTERPRET", "") or LLM_MODEL
 LLM_API_BASE: str = os.getenv("LLM_API_BASE", "http://localhost:8000/v1")
 LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
 

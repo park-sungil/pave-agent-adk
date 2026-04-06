@@ -109,7 +109,7 @@ def analyze(
     )
 
     try:
-        llm_kwargs: dict = {"model": settings.LLM_MODEL}
+        llm_kwargs: dict = {"model": settings.LLM_MODEL_ANALYZE}
         if settings.LLM_API_BASE:
             llm_kwargs["api_base"] = settings.LLM_API_BASE
         if settings.LLM_API_KEY:
