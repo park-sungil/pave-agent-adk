@@ -1,4 +1,4 @@
-"""query_data tool: DB query executor with PDK resolution and session caching.
+"""DB query tools: query_versions and query_ppa.
 
 No LLM calls. Resolves PDK versions from cached data, loads PPA data once
 per PDK into session state, and filters in Python.
@@ -36,9 +36,6 @@ SELECT PDK_ID, CELL, DS, CORNER, TEMP, VDD, VTH,
 FROM {_PPA_TABLE}
 WHERE PDK_ID = :pdk_id"""
 
-_PDK_FILTER_KEYS = {"process", "project", "project_name", "mask", "dk_gds"}
-_TOOL_VERSION_KEYS = {"hspice", "lvs", "pex"}
-_PPA_FILTER_KEYS = {"cell", "corner", "temp", "vdd", "vth", "ds", "wns", "ch"}
 _CANDIDATE_COLUMNS = [
     "PDK_ID", "PROCESS", "PROJECT_NAME", "MASK", "DK_GDS",
     "VDD_NOMINAL", "HSPICE", "LVS", "PEX",
@@ -55,77 +52,105 @@ def load_versions(state: dict[str, Any]) -> list[dict[str, Any]]:
     return state[_VERSION_CACHE_KEY]
 
 
-def query_data(
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
+
+def query_versions(
     tool_context: ToolContext,
-    query_type: str,
-    filters: dict[str, Any] | None = None,
+    project: str | None = None,
+    project_name: str | None = None,
+    process: str | None = None,
+    mask: str | None = None,
 ) -> dict[str, Any]:
-    """DB 데이터를 조회한다.
+    """PDK 버전 목록을 조회한다.
 
     Args:
         tool_context: ADK tool context (session state).
-        query_type: "versions" (PDK 목록) 또는 "ppa_data" (PPA 측정 데이터).
-        filters: 쿼리 필터 조건.
+        project: 프로젝트 코드 (예: S5E9985).
+        project_name: 프로젝트명 (예: Vanguard).
+        process: 공정명 (예: SF2PP).
+        mask: 마스크 버전 (예: EVT0).
 
     Returns:
-        versions: {"data": [...], "count": int}
-        ppa_data: {"count": int, "pdk_ids": [...], "unique_values": {...}}
-        candidates: {"candidates": [...], "message": str}
-        error: {"error": str}
+        {"data": [...], "count": int}
     """
-    filters = filters if isinstance(filters, dict) else {}
-    logger.info("[query_data] query_type=%s, filters=%s", query_type, filters)
+    filters = {}
+    if project is not None:
+        filters["PROJECT"] = project
+    if project_name is not None:
+        filters["PROJECT_NAME"] = project_name
+    if process is not None:
+        filters["PROCESS"] = process
+    if mask is not None:
+        filters["MASK"] = mask
+
+    logger.info("[query_versions] filters=%s", filters)
 
     try:
-        if query_type == "versions":
-            return _query_versions(tool_context, filters)
-        elif query_type == "ppa_data":
-            return _query_ppa_data(tool_context, filters)
-        else:
-            return {"error": f"Unknown query_type: {query_type}"}
+        all_rows = load_versions(tool_context.state)
+        filtered = _filter_rows(all_rows, filters)
+        results = [{"IDX": i, **row} for i, row in enumerate(filtered, 1)]
+        return {"data": results, "count": len(results)}
     except Exception as e:
-        logger.error("query_data failed: %s", e, exc_info=True)
+        logger.error("query_versions failed: %s", e, exc_info=True)
         return {"error": str(e)}
 
 
-def _query_versions(
+def query_ppa(
     tool_context: ToolContext,
-    filters: dict[str, Any],
+    pdk_id: int,
+    cell: str | None = None,
+    corner: str | None = None,
+    temp: float | None = None,
+    vdd: float | None = None,
+    vth: str | None = None,
+    ds: str | None = None,
+    wns: str | None = None,
+    ch: str | None = None,
 ) -> dict[str, Any]:
-    """PDK 버전 목록 조회 (캐시에서 Python 필터링)."""
-    all_rows = load_versions(tool_context.state)
-    filtered = _filter_rows(all_rows, filters)
-    results = [{"IDX": i, **row} for i, row in enumerate(filtered, 1)]
-    return {"data": results, "count": len(results)}
+    """PPA 측정 데이터를 조회한다. pdk_id 필수.
 
+    pdk_id를 모르면 먼저 query_versions로 PDK ID를 확인하세요.
 
-def _query_ppa_data(
-    tool_context: ToolContext,
-    filters: dict[str, Any],
-) -> dict[str, Any]:
-    """PPA 측정 데이터 조회 (PDK resolve → 전체 로드 → Python 필터링)."""
-    # Resolve PDK IDs
-    cached_versions = load_versions(tool_context.state)
-    resolve_result = _resolve_pdks(cached_versions, filters)
+    Args:
+        tool_context: ADK tool context (session state).
+        pdk_id: 조회할 PDK ID (필수). query_versions 결과에서 확인.
+        cell: 셀 타입 (예: INV, ND2).
+        corner: 공정 코너 (예: TT, SSPG).
+        temp: 온도 (예: -25, 25, 125).
+        vdd: 전압 (예: 0.54, 0.72).
+        vth: Vth flavor (예: LVT, HVT).
+        ds: 드라이브 스트렝스 (예: D1, D2).
+        wns: nanosheet width (예: N1, N2).
+        ch: cell height (예: CH138, CH148).
 
-    if resolve_result["status"] == "candidates":
-        return {
-            "candidates": resolve_result["candidates"],
-            "message": "PDK 버전이 여러 개입니다. 아래 목록을 사용자에게 테이블로 보여주고 번호로 선택을 요청하세요. 사용자가 선택하면 해당 PDK_ID로 query_data('ppa_data', {'pdk_id': 선택된_ID})를 다시 호출하세요.",
-        }
-    elif resolve_result["status"] == "no_match":
-        return {
-            "error": "조건에 맞는 PDK가 없습니다.",
-            "available": resolve_result.get("available", {}),
-        }
+    Returns:
+        {"count": int, "pdk_ids": [...], "unique_values": {...}}
+        세션에 _ppa_data_{pdk_id}로 저장됨.
+    """
+    logger.info("[query_ppa] pdk_id=%s, cell=%s, corner=%s, temp=%s, vdd=%s, vth=%s, ds=%s, wns=%s, ch=%s",
+                pdk_id, cell, corner, temp, vdd, vth, ds, wns, ch)
 
-    pdk_ids = resolve_result["pdk_ids"]
+    try:
+        ppa_filters: dict[str, Any] = {}
+        if cell is not None:
+            ppa_filters["CELL"] = cell
+        if corner is not None:
+            ppa_filters["CORNER"] = corner
+        if temp is not None:
+            ppa_filters["TEMP"] = temp
+        if vdd is not None:
+            ppa_filters["VDD"] = vdd
+        if vth is not None:
+            ppa_filters["VTH"] = vth
+        if ds is not None:
+            ppa_filters["DS"] = ds
+        if wns is not None:
+            ppa_filters["WNS"] = wns
+        if ch is not None:
+            ppa_filters["CH"] = ch
 
-    # Load full PPA data per PDK (once), cache in session, filter in Python
-    ppa_filters = {k: v for k, v in filters.items() if k in _PPA_FILTER_KEYS}
-    all_results: list[dict[str, Any]] = []
-
-    for pdk_id in pdk_ids:
         cache_key = f"_ppa_data_{pdk_id}"
         if cache_key not in tool_context.state:
             logger.info("[SQL] loading full PPA for pdk_id=%s", pdk_id)
@@ -135,9 +160,11 @@ def _query_ppa_data(
             )
         rows = tool_context.state[cache_key]
         filtered = _filter_rows(rows, ppa_filters)
-        all_results.extend(filtered)
 
-    return _summarize(all_results, pdk_ids)
+        return _summarize(filtered, [pdk_id])
+    except Exception as e:
+        logger.error("query_ppa failed: %s", e, exc_info=True)
+        return {"error": str(e)}
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +236,8 @@ def _resolve_pdks(
 
     # Step 1: Narrow by PROCESS / PROJECT / PROJECT_NAME / MASK / DK_GDS
     rows = cached_versions
-    for key in _PDK_FILTER_KEYS:
+    _pdk_filter_keys = {"process", "project", "project_name", "mask", "dk_gds"}
+    for key in _pdk_filter_keys:
         val = filters.get(key)
         if val is None:
             continue
@@ -224,7 +252,8 @@ def _resolve_pdks(
         return {"status": "no_match", "available": {"projects": available_projects}}
 
     # Step 2: HSPICE/LVS/PEX explicitly specified
-    tool_filters = {k: filters[k] for k in _TOOL_VERSION_KEYS if k in filters}
+    _tool_version_keys = {"hspice", "lvs", "pex"}
+    tool_filters = {k: filters[k] for k in _tool_version_keys if k in filters}
     if tool_filters:
         for key, val in tool_filters.items():
             rows = [r for r in rows if r.get(key.upper()) == val]

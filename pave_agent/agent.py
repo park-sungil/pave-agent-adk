@@ -8,10 +8,11 @@ import logging
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.lite_llm import LiteLlm
+from google.genai import types
 
 from pave_agent import settings
 from pave_agent.prompts import INSTRUCTION
-from pave_agent.tools.query_data import query_data
+from pave_agent.tools.query_data import query_versions, query_ppa
 from pave_agent.tools.analyze import analyze
 from pave_agent.tools.interpret import interpret
 
@@ -42,6 +43,9 @@ root_agent = Agent(
     model=_llm,
     description="반도체 PDK Cell-level PPA 분석 챗봇 에이전트",
     instruction=INSTRUCTION,
-    tools=[query_data, analyze, interpret],
+    tools=[query_versions, query_ppa, analyze, interpret],
     before_agent_callback=_init_state,
+    generate_content_config=types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(include_thoughts=True),
+    ),
 )
