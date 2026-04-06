@@ -51,6 +51,7 @@ def execute(code: str, data: list[dict[str, Any]]) -> dict[str, Any]:
         namespace.update({
             "pd": pd,
             "np": np,
+            "matplotlib": matplotlib,
             "plt": plt,
             "stats": stats,
             "base64": base64,
@@ -62,6 +63,12 @@ def execute(code: str, data: list[dict[str, Any]]) -> dict[str, Any]:
     # Initialize output variables
     namespace["result"] = {}
     namespace["charts"] = []
+
+    # Strip import lines — all allowed modules are pre-imported in namespace
+    code = "\n".join(
+        line for line in code.split("\n")
+        if not line.strip().startswith(("import ", "from "))
+    )
 
     try:
         exec(code, namespace)  # noqa: S102

@@ -19,13 +19,6 @@ _VERSION_TABLE = "ANTSDB.PAVE_PDK_VERSION_VIEW"
 _PPA_TABLE = "ANTSDB.PAVE_PPA_DATA_VIEW"
 _VERSION_CACHE_KEY = f"_cache_{_VERSION_TABLE}"
 
-_PPA_SQL = f"""\
-SELECT PDK_ID, CELL, DS, CORNER, TEMP, VDD, VTH,
-       FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM,
-       S_POWER, IDDQ_NA, WNS, WNS_VAL, CH, CH_TYPE
-FROM {_PPA_TABLE}
-WHERE PDK_ID = :pdk_id"""
-
 _VERSION_SQL = f"""\
 SELECT PDK_ID, PROCESS, PROJECT, PROJECT_NAME, MASK, DK_GDS,
        VDD_NOMINAL, HSPICE, LVS, PEX, CREATED_AT, CREATED_BY
@@ -35,6 +28,13 @@ WHERE (PROJECT, MASK, DK_GDS, HSPICE, LVS, PEX, CREATED_AT) IN (
     FROM {_VERSION_TABLE}
     GROUP BY PROJECT, MASK, DK_GDS, HSPICE, LVS, PEX
 )"""
+
+_PPA_SQL = f"""\
+SELECT PDK_ID, CELL, DS, CORNER, TEMP, VDD, VTH,
+       FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM,
+       S_POWER, IDDQ_NA, WNS, WNS_VAL, CH, CH_TYPE
+FROM {_PPA_TABLE}
+WHERE PDK_ID = :pdk_id"""
 
 _PDK_FILTER_KEYS = {"process", "project", "project_name", "mask", "dk_gds"}
 _TOOL_VERSION_KEYS = {"hspice", "lvs", "pex"}
@@ -73,7 +73,7 @@ def query_data(
         candidates: {"candidates": [...], "message": str}
         error: {"error": str}
     """
-    filters = filters or {}
+    filters = filters if isinstance(filters, dict) else {}
 
     try:
         if query_type == "versions":
@@ -248,15 +248,3 @@ def _resolve_pdks(
         return {"status": "candidates", "candidates": candidates}
 
     return {"status": "resolved", "pdk_ids": [r["PDK_ID"] for r in rows]}
-
-
-def _dedup_by_created_at(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """For rows with same 6-tuple, keep the one with latest CREATED_AT."""
-    best: dict[tuple, dict[str, Any]] = {}
-    for r in rows:
-        key = (r.get("PROJECT"), r.get("MASK"), r.get("DK_GDS"),
-               r.get("HSPICE"), r.get("LVS"), r.get("PEX"))
-        existing = best.get(key)
-        if existing is None or str(r.get("CREATED_AT", "")) > str(existing.get("CREATED_AT", "")):
-            best[key] = r
-    return list(best.values())

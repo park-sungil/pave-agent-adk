@@ -1,4 +1,4 @@
-"""PAVE agent instruction."""
+"""PAVE agent orchestrator instruction."""
 
 INSTRUCTION = """\
 당신은 반도체 PDK Cell-level PPA (Power, Performance, Area) 분석 전문 어시스턴트입니다.
