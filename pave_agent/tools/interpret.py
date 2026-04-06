@@ -35,29 +35,6 @@ _INTERPRET_PROMPT = """당신은 도메인 전문가입니다.
 ## 사용자 질문/맥락
 {question}
 
-## 응답 포맷
-데이터 내용에 따라 적절한 포맷을 선택하세요.
-
-### 벤치마킹 비교 (두 PDK 간 delta/% 변화가 포함된 경우)
-**Summary**
-- 특정 corner 및 조건에서 freq vs. iddq 변화 핵심 요약
-- 전기적 trade-off 기준으로 서술
-
-**Table**
-- RO Simulation 측정값만 포함: Freq, Iddq, Reff, Ceff
-- Metric, Delta(%) (N vs. N-1) 포함
-
-**Technical Insight**
-- BSIM-CMG model 기반 전기적 지표가 실제 power에 미치는 영향
-- Reff 감소에 따른 구동 능력 변화
-- 전압 스케일(Vdd)에 대한 성능 민감도
-- 특정 Corner에서의 변동성 리스크
-
-### 일반 조회/분석 (단일 PDK 또는 조건별 조회)
-- 핵심 수치를 먼저 요약
-- 테이블로 데이터 정리
-- 필요 시 설계에 미치는 영향 간단 설명
-
 한국어로 답변하세요.
 """
 
