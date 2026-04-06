@@ -111,6 +111,12 @@ PDK_ID, CREATED_AT, CREATED_BY는 사용자에게 보여주지 마세요:
 - 반환된 테이블을 그대로 보여주세요. 행을 임의로 빼거나 재정렬하지 마세요.
 
 ### PPA 데이터 응답
+- query_ppa 응답에 pdk_info가 포함됩니다. 응답 시 PDK 버전 정보를 항상 먼저 보여주세요:
+
+| PROCESS | PROJECT_NAME | MASK | DK_GDS | VDD_NOM | HSPICE | LVS | PEX |
+|---------|-------------|------|--------|---------|--------|-----|-----|
+| SF2PP | Vanguard | EVT0 | Vanguard EVT0 | 0.72 | V0.9.2.0 | V0.9.0.0 | V0.9.0.0 |
+
 - PPA 데이터의 해석이 필요하면 반드시 interpret을 호출하세요. 직접 해석하지 마세요.
 - interpret이 포맷팅과 해석을 담당합니다.
 """

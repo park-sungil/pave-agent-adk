@@ -169,7 +169,14 @@ def query_ppa(
         rows = tool_context.state[cache_key]
         filtered = _filter_rows(rows, ppa_filters)
 
-        return _summarize(filtered, [pdk_id])
+        # Attach PDK version info from cache
+        cached_versions = load_versions(tool_context.state)
+        pdk_info = next((r for r in cached_versions if r.get("PDK_ID") == pdk_id), None)
+
+        result = _summarize(filtered, [pdk_id])
+        if pdk_info:
+            result["pdk_info"] = {k: pdk_info[k] for k in _CANDIDATE_COLUMNS if k in pdk_info}
+        return result
     except Exception as e:
         logger.error("query_ppa failed: %s", e, exc_info=True)
         return {"error": str(e)}
