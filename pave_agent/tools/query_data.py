@@ -30,7 +30,7 @@ WHERE (PROJECT, MASK, DK_GDS, HSPICE, LVS, PEX, CREATED_AT) IN (
 )"""
 
 _PPA_SQL = f"""\
-SELECT PDK_ID, CELL, DS, CORNER, TEMP, VDD, VTH,
+SELECT PDK_ID, CELL, DS, CORNER, TEMP, VDD, VDD_TYPE, VTH,
        FREQ_GHZ, D_POWER, D_ENERGY, ACCEFF_FF, ACREFF_KOHM,
        S_POWER, IDDQ_NA, WNS, WNS_VAL, CH, CH_TYPE
 FROM {_PPA_TABLE}
@@ -180,7 +180,7 @@ def _summarize(
         return {"count": 0, "pdk_ids": pdk_ids, "message": "조회 결과 없음."}
 
     unique = {}
-    for col in ("CELL", "CORNER", "TEMP", "VDD", "VTH", "DS", "WNS", "CH"):
+    for col in ("CELL", "CORNER", "TEMP", "VDD", "VDD_TYPE", "VTH", "DS", "WNS", "CH", "CH_TYPE"):
         vals = sorted({str(r[col]) for r in rows if col in r})
         if vals:
             unique[col] = vals
