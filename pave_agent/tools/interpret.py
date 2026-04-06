@@ -62,6 +62,8 @@ def interpret(
     Returns:
         도메인 해석 텍스트.
     """
+    logger.info("[interpret] question=%s, data_type=%s, context=%s", question, type(data).__name__, context)
+
     # Prepare data summary
     if isinstance(data, list):
         data_summary = json.dumps(data[:20], ensure_ascii=False, default=str, indent=2)

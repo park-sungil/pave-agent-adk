@@ -66,6 +66,8 @@ def analyze(
         {"result": dict, "charts_count": int, "message": str}.
         결과는 session state에 _analysis_result로 저장됨.
     """
+    logger.info("[analyze] pdk_ids=%s, analysis_request=%s", pdk_ids, analysis_request)
+
     if isinstance(pdk_ids, (int, float)):
         pdk_ids = [int(pdk_ids)]
     elif not isinstance(pdk_ids, list):
@@ -125,7 +127,7 @@ def analyze(
             lines = code.split("\n")
             code = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
 
-        logger.info("Generated analysis code (%d chars)", len(code))
+        logger.info("Generated analysis code (%d chars):\n%s", len(code), code)
 
     except Exception as e:
         logger.error("LLM code generation failed: %s", e)
