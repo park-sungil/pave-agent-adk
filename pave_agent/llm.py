@@ -20,24 +20,25 @@ if not any(type(cb).__name__ == "_FixAssistantContent" for cb in litellm.callbac
     litellm.callbacks.append(_FixAssistantContent())
 
 
+if settings.LLM_AUTH_METHOD == "header":
+    AUTH = {
+        "api_base": settings.LLM_API_BASE_HEADER,
+        "extra_headers": {settings.LLM_API_HEADER_NAME: settings.LLM_API_HEADER_VALUE},
+    }
+else:
+    AUTH = {
+        "api_base": settings.LLM_API_BASE_KEY,
+        "api_key": settings.LLM_API_KEY,
+    }
+
+
 def build_adk_model(model=None):
-    model = model or settings.LLM_MODEL
-    if settings.LLM_AUTH_METHOD == "header":
-        return LiteLlm(
-            model=model,
-            api_base=settings.LLM_API_BASE_HEADER,
-            extra_headers={settings.LLM_API_HEADER_NAME: settings.LLM_API_HEADER_VALUE},
-        )
-    return LiteLlm(
-        model=model,
-        api_base=settings.LLM_API_BASE_KEY,
-        api_key=settings.LLM_API_KEY,
-    )
+    return LiteLlm(model=model or settings.LLM_MODEL, **AUTH)
 
 
 def call_llm(model, messages, temperature=0.0, max_tokens=4096, **extra):
     response = litellm.completion(
-        messages=messages, temperature=temperature, max_tokens=max_tokens,
-        **build_adk_model(model)._additional_args, **extra,
+        model=model, **AUTH, messages=messages,
+        temperature=temperature, max_tokens=max_tokens, **extra,
     )
     return response.choices[0].message.content.strip()
