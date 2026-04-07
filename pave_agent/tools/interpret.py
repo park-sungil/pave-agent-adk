@@ -10,9 +10,7 @@ import json
 import logging
 from typing import Any
 
-import litellm
-
-from pave_agent import settings
+from pave_agent import llm, settings
 from pave_agent.rag import retriever
 
 logger = logging.getLogger(__name__)
@@ -78,18 +76,12 @@ def interpret(
     )
 
     try:
-        llm_kwargs: dict = {"model": settings.LLM_MODEL_INTERPRET}
-        if settings.LLM_API_BASE:
-            llm_kwargs["api_base"] = settings.LLM_API_BASE
-        if settings.LLM_API_KEY:
-            llm_kwargs["api_key"] = settings.LLM_API_KEY
-        response = litellm.completion(
-            **llm_kwargs,
-            messages=[{"role": "user", "content": prompt}],
+        return llm.call_llm(
+            settings.LLM_MODEL_INTERPRET,
+            [{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=4096,
         )
-        return response.choices[0].message.content.strip()
 
     except Exception as e:
         logger.error("Interpret LLM call failed: %s", e)

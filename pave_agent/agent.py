@@ -7,11 +7,9 @@ import logging
 
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
-from google.adk.models.lite_llm import LiteLlm
 from google.genai import types
 
-from pave_agent import litellm_patch  # noqa: F401  — registers vLLM content fix
-from pave_agent import settings
+from pave_agent import llm, settings
 from pave_agent.prompts import INSTRUCTION
 from pave_agent.tools.query_data import query_versions, query_ppa
 from pave_agent.tools.analyze import analyze
@@ -33,15 +31,9 @@ def _init_state(callback_context: CallbackContext) -> None:
         callback_context.state["_versions_loaded"] = True
 
 
-_llm = LiteLlm(
-    model=settings.LLM_MODEL,
-    api_base=settings.LLM_API_BASE or None,
-    api_key=settings.LLM_API_KEY or None,
-)
-
 root_agent = Agent(
     name="pave_agent",
-    model=_llm,
+    model=llm.build_adk_model(),
     description="반도체 PDK Cell-level PPA 분석 챗봇 에이전트",
     instruction=INSTRUCTION,
     tools=[query_versions, query_ppa, analyze, interpret],
