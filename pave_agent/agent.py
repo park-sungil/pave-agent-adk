@@ -10,6 +10,7 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.lite_llm import LiteLlm
 from google.genai import types
 
+from pave_agent import litellm_patch  # noqa: F401  — registers vLLM content fix
 from pave_agent import settings
 from pave_agent.prompts import INSTRUCTION
 from pave_agent.tools.query_data import query_versions, query_ppa
