@@ -12,7 +12,16 @@ LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/glm-4.7")
 LLM_MODEL_ANALYZE: str = os.getenv("LLM_MODEL_ANALYZE", "") or LLM_MODEL
 LLM_MODEL_INTERPRET: str = os.getenv("LLM_MODEL_INTERPRET", "") or LLM_MODEL
 LLM_API_BASE: str = os.getenv("LLM_API_BASE", "http://localhost:8000/v1")
+
+# Auth method: "key" uses api_key, "header" uses extra_headers.
+LLM_AUTH_METHOD: str = os.getenv("LLM_AUTH_METHOD", "key").lower()
+
+# Method "key"
 LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+
+# Method "header"
+LLM_API_HEADER_NAME: str = os.getenv("LLM_API_HEADER_NAME", "Authorization")
+LLM_API_HEADER_VALUE: str = os.getenv("LLM_API_HEADER_VALUE", "")
 
 # Oracle DB
 ORACLE_DSN: str = os.getenv("ORACLE_DSN", "localhost:1521/pavedb")
