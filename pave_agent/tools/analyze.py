@@ -10,10 +10,9 @@ import json
 import logging
 from typing import Any
 
-import litellm
 from google.adk.tools import ToolContext
 
-from pave_agent import settings
+from pave_agent import llm, settings
 from pave_agent.sandbox import executor
 
 logger = logging.getLogger(__name__)
@@ -109,18 +108,12 @@ def analyze(
     )
 
     try:
-        llm_kwargs: dict = {"model": settings.LLM_MODEL_ANALYZE}
-        if settings.LLM_API_BASE:
-            llm_kwargs["api_base"] = settings.LLM_API_BASE
-        if settings.LLM_API_KEY:
-            llm_kwargs["api_key"] = settings.LLM_API_KEY
-        response = litellm.completion(
-            **llm_kwargs,
-            messages=[{"role": "user", "content": prompt}],
+        code = llm.call_llm(
+            settings.LLM_MODEL_ANALYZE,
+            [{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=4096,
         )
-        code = response.choices[0].message.content.strip()
 
         # Strip markdown code fences if present
         if code.startswith("```"):

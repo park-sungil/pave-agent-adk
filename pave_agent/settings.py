@@ -11,8 +11,20 @@ load_dotenv()
 LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/glm-4.7")
 LLM_MODEL_ANALYZE: str = os.getenv("LLM_MODEL_ANALYZE", "") or LLM_MODEL
 LLM_MODEL_INTERPRET: str = os.getenv("LLM_MODEL_INTERPRET", "") or LLM_MODEL
-LLM_API_BASE: str = os.getenv("LLM_API_BASE", "http://localhost:8000/v1")
+
+# Auth: "key" or "header" — flip to switch
+LLM_AUTH: str = os.getenv("LLM_AUTH", "key").lower()
+
+# Method "key"
+LLM_API_BASE_KEY: str = os.getenv("LLM_API_BASE_KEY", "")
 LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+
+# Method "header" (vLLM)
+LLM_API_BASE_HEADER: str = os.getenv("LLM_API_BASE_HEADER", "")
+VLLM_DEP_TICKET: str = os.getenv("VLLM_DEP_TICKET", "")
+VLLM_SEND_SYSTEM_NAME: str = os.getenv("VLLM_SEND_SYSTEM_NAME", "")
+VLLM_USER_ID: str = os.getenv("VLLM_USER_ID", "")
+VLLM_USER_TYPE: str = os.getenv("VLLM_USER_TYPE", "")
 
 # Oracle DB
 ORACLE_DSN: str = os.getenv("ORACLE_DSN", "localhost:1521/pavedb")
