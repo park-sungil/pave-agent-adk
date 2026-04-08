@@ -19,8 +19,8 @@ def _fix_messages(messages):
     if not messages:
         return
     for msg in messages:
-        if msg.get("role") == "assistant" and "content" not in msg:
-            msg["content"] = None
+        if msg.get("role") == "assistant" and msg.get("content") is None:
+            msg["content"] = ""
 
 
 def _patched_completion(*args, **kwargs):
