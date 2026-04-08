@@ -42,8 +42,8 @@ PROCESS명의 "SF" 뒤 숫자가 공정 노드입니다 (SF3→3nm, SF2/SF2P/SF2
   - ds 미명시 → AVG(D1, D4) 평균 집계
   - wns 미명시 → (project_name, mask, ch_type)별 default WNS
   - vth 미명시 → 모든 vth 반환
-- query_ppa에 ch/ch_type 둘 다 없거나 PVT가 모호(예: SSPG만 명시)하면 query_ppa가 내부에서 사용자 확인 요청을 발동합니다. ADK가 자동으로 사용자에게 질문을 표시하고, 응답을 받으면 query_ppa를 재호출합니다. 오케스트레이터는 개입하지 말고 기다리세요.
-- query_ppa가 `{"status": "needs_clarification"}`을 반환하면 ADK가 이미 사용자 질문 이벤트를 생성한 상태입니다. 추가 처리 불필요.
+- query_ppa가 `needs_input` 필드를 포함한 응답을 반환하면, 사용자 입력이 필요한 것입니다. needs_input의 메시지와 options를 자연스러운 한국어 질문으로 변환하여 사용자에게 물어보세요. "error" 같은 단어는 쓰지 말고, 친절한 질문으로 표현. 사용자가 답하면 그 값을 파라미터에 넣어 query_ppa를 재호출하세요.
+- 사용자가 PPA 요청 시 ch/ch_type을 명시하지 않으면, query_ppa를 호출하기 전에 먼저 어떤 cell height 타입(HP/HD/uHD)을 원하는지 물어보세요. (HP for big CPU, HD for mid CPU, uHD for GPU)
 
 ## 도구 호출 가이드
 

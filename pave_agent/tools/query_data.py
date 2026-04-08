@@ -247,29 +247,20 @@ def query_ppa(
 
         # ch_type is required (or ch which uniquely determines ch_type)
         if ch is None and ch_type is None:
-            tool_context.request_confirmation(
-                hint="cell height 타입을 선택해주세요: HP (for big CPU), HD (for mid CPU), uHD (for GPU)",
-                payload={"required_field": "ch_type", "options": ["HP", "HD", "uHD"]},
-            )
-            tool_context.actions.skip_summarization = True
-            return {"status": "needs_clarification"}
+            return {
+                "needs_input": "cell height 타입을 선택해주세요: HP (for big CPU), HD (for mid CPU), uHD (for GPU)",
+                "options": ["HP", "HD", "uHD"],
+                "dependencies": dependencies,
+            }
 
         # Resolve PVT
         pvt, pvt_error = _resolve_pvt(corner, temp, vdd_type)
         if pvt_error:
-            tool_context.request_confirmation(
-                hint=pvt_error,
-                payload={
-                    "required_field": "pvt",
-                    "options": [
-                        "TT/25/NM",
-                        "SSPG/125/SOD",
-                        "SSPG/-25/UUD",
-                    ],
-                },
-            )
-            tool_context.actions.skip_summarization = True
-            return {"status": "needs_clarification"}
+            return {
+                "needs_input": pvt_error,
+                "options": ["TT/25/NM", "SSPG/125/SOD", "SSPG/-25/UUD"],
+                "dependencies": dependencies,
+            }
 
         applied_defaults: dict[str, str] = {}
         for axis in ("corner", "temp", "vdd_type"):
