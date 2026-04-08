@@ -175,10 +175,25 @@ _SEED_PDK_VERSION = [
 # PPA data generation — full cross product with realistic values
 # ---------------------------------------------------------------------------
 
-# VDD ratios and types
-_VDD_TYPES = ["UUD", "SUD", "UD", "NM", "OD", "SOD"]
-_VDD_RATIOS = [0.75, 0.833, 0.903, 1.0, 1.111, 1.222]
-_VDD_BASE = {"TT": 0.72, "SSPG": 0.76}
+# Per-corner (vdd, vdd_type) pairs — explicit values, not computed from ratios
+_VDD_BY_CORNER: dict[str, list[tuple[float, str]]] = {
+    "TT": [
+        (0.5, "UUD"),
+        (0.575, "SUD"),
+        (0.63, "UD"),
+        (0.72, "NM"),
+        (0.8, "OD"),
+        (1.0, "SOD"),
+    ],
+    "SSPG": [
+        (0.475, "UUD"),
+        (0.54, "SUD"),
+        (0.6, "UD"),
+        (0.685, "NM"),
+        (0.76, "OD"),
+        (0.95, "SOD"),
+    ],
+}
 
 # CH → (CH_TYPE, available WNS levels)
 _CH_WNS = {
@@ -242,14 +257,7 @@ def _generate_ppa_data() -> list[dict]:
         pdk_leak_noise = rng.uniform(0.90, 1.10)
 
         for corner in _CORNERS:
-            vdd_base = _VDD_BASE[corner]
-            vdd_pairs = [
-                (round(vdd_base * r, 3), vdd_type)
-                for r, vdd_type in zip(_VDD_RATIOS, _VDD_TYPES)
-            ]
-
-            for vdd_num, vdd_type in vdd_pairs:
-                vdd = vdd_num
+            for vdd, vdd_type in _VDD_BY_CORNER[corner]:
                 vdd_freq = (vdd / _VDD_NOM) ** 1.3
                 vdd_power = (vdd / _VDD_NOM) ** 2
                 vdd_leak = math.exp(3.5 * (vdd - _VDD_NOM))

@@ -59,6 +59,8 @@ vdd_type은 vdd에 대응하되, 매핑은 CORNER별로 다릅니다. ch_type은
 - query_ppa는 pdk_id가 필수입니다. pdk_id를 모르면 먼저 query_versions로 확인하세요.
 - query_ppa의 결과는 세션에 자동 저장됩니다. analyze 호출 시 pdk_ids만 전달하면 됩니다.
 - analyze가 에러를 반환하면 interpret을 호출하지 마세요. 에러 내용을 사용자에게 직접 전달하세요.
+- **수치 계산은 반드시 analyze를 호출하세요.** delta, % 변화, 평균, 비교, 통계 등 어떤 산술 연산도 당신(LLM)이 직접 계산하지 마세요. query_ppa 데이터를 보고 머릿속으로 계산하는 것은 금지입니다. 계산이 필요한 모든 경우(벤치마킹 비교, 변화율, 집계 등)에 analyze를 호출하세요.
+- 예외: query_ppa 응답의 data에 있는 raw 숫자를 **그대로 표시**하는 것은 OK (계산 없음).
 
 ### 데이터 조회
 사용자가 특정 조건의 데이터를 요청할 때:
