@@ -79,21 +79,52 @@ LLM 호출은 정확히 3곳이다. 각각 역할이 분리되어 있으며, 프
 - 의도별 처리 방식은 프롬프트에 가이드로 포함한다. 별도 코드 라우팅 레이어 없음.
 - 예: 단순 조회 → query_data → interpret, 상관분석 → query_data → analyze → interpret
 
-### query_data (tool, 순수 코드)
+### query_data (tools, 순수 코드)
 
-- LLM 호출 없음. 순수 코드로 동작한다.
-- 범용 시그니처: `query_data(query_type, filters)`. 필터 조건은 dict로 받는다.
-- sql_skill/SKILL.md에서 SQL 템플릿, 캐시 설정, 엔티티 매핑을 파싱한다.
-  - SQL 템플릿: `### 템플릿명` + ` ```sql ``` ` 블록에서 파싱
-  - 캐시 설정: `## Cache` 섹션의 마크다운 테이블에서 파싱 (테이블명, 필터 컬럼)
-- `filters` dict의 키를 SQL 바인드 파라미터와 템플릿 placeholder에 자동 매핑한다.
-- 사용하는 뷰가 소수(현재 2개)이므로 LLM SQL 생성이 아닌 템플릿 방식을 사용한다.
+현재 두 개의 explicit tool로 분리되어 있다:
+- **query_versions**(project, project_name, process, mask, node): PDK 버전 조회. `node="2nm"`/`"3nm"`는 코드에서 SF2/SF2P/SF2PP, SF3로 확장된다.
+- **query_ppa**(pdk_id, cell, corner, temp, vdd, vdd_type, vth, ds, wns, ch, ch_type): PPA 데이터 조회. `pdk_id` 필수.
 
-#### 캐싱
+둘 다 LLM 호출 없음, 순수 코드. SQL은 하드코딩(템플릿 파싱 아님). 세션 시작 시 PDK 버전 + default WNS config를 미리 로드해서 캐싱한다.
 
-- sql_skill의 Cache 섹션에 정의된 소량 테이블은 최초 1회 전체 조회(WHERE 없이) 후 메모리에 캐싱한다.
-- 이후 해당 테이블 조회는 캐시에서 Python 필터링으로 처리한다. DB 재조회 없음.
-- 새 캐시 대상 추가 시 sql_skill의 Cache 테이블에 행만 추가하면 된다.
+#### 세션 캐시 키
+
+- `_cache_ANTSDB.PAVE_PDK_VERSION_VIEW`: 전체 PDK 버전 (1회 로드)
+- `_cache_AT9.PDKPAS_CONFIG_JSON_FAV`: default WNS config
+- `_ppa_data_{pdk_id}`: PDK별 전체 PPA rows (첫 query_ppa 시 로드)
+- `_ppa_deps_{pdk_id}`: PDK별 의존성 (ch/corner/cell/temp/vth + default_wns)
+- `_ppa_filtered_{pdk_id}`: 직전 query_ppa의 필터+집계 결과 (analyze가 재사용)
+
+#### Default 적용 규칙 (query_ppa)
+
+사용자가 명시하지 않은 파라미터는 query_ppa가 자동으로 default를 적용한다:
+
+| 파라미터 | Default | 비고 |
+|---------|---------|------|
+| corner/temp/vdd_type | `TT/25/NM` (T1) | 표준 triple 매칭. 모호(예: SSPG만) → 되묻기. 다른 표준: T2 `SSPG/125/SOD`, T3 `SSPG/-25/SUD` |
+| cell | `AVG(INV, ND2, NR2)` | 평균 집계. CELL 라벨은 `"AVG(INV,ND2,NR2)"` |
+| ds | `AVG(D1, D4)` | 평균 집계 |
+| wns | `(project_name, mask, ch_type)` 별 config | `AT9.PDKPAS_CONFIG_JSON_FAV`에서 로드. config 없으면 최소 WNS로 fallback |
+| ch_type | **필수** | 없으면 `needs_input` 반환 → orchestrator가 사용자에게 HP/HD/uHD 질문 |
+| vth | 전체 반환 | default 없음 |
+
+사용자가 명시한 값은 절대 교정하지 않는다. 표준 triple은 빠진 axes를 채우는 용도지, 사용자가 명시한 값을 덮어쓰지 않는다. 사용자가 `vdd`(숫자)를 명시하면 `vdd_type` default는 스킵한다 (중복 필터 방지).
+
+#### query_ppa 응답 구조
+
+```
+{
+  "count": N,
+  "pdk_ids": [pdk_id],
+  "pdk_info": {PROCESS, PROJECT_NAME, MASK, DK_GDS, HSPICE, LVS, PEX, ...},
+  "dependencies": {ch, corner, cell, temp, vth, ...},
+  "applied_defaults": {...},
+  "data": [...],   # 결과가 50행 이하일 때만 포함
+  "message": "..."
+}
+```
+
+orchestrator는 `applied_defaults`를 보고 사용자에게 어떤 default가 적용됐는지 알리고 대안 옵션(T1/T2/T3, 특정 cell, 특정 ds 등)을 제시해야 한다. 50행 초과 시 `data`는 생략되고 analyze가 `_ppa_filtered_{pdk_id}` 캐시에서 읽어 처리한다.
 
 ### analyze (tool, LLM + code sandbox)
 
