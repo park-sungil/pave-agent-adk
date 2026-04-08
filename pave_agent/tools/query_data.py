@@ -91,6 +91,7 @@ def query_versions(
         all_rows = load_versions(tool_context.state)
         filtered = _filter_rows(all_rows, filters)
         results = [{"IDX": i, **row} for i, row in enumerate(filtered, 1)]
+        logger.info("[query_versions] returned %d rows", len(results))
         return {"data": results, "count": len(results)}
     except Exception as e:
         logger.error("query_versions failed: %s", e, exc_info=True)
@@ -166,8 +167,10 @@ def query_ppa(
                 _PPA_SQL,
                 {"pdk_id": pdk_id},
             )
+            logger.info("[SQL] loaded %d rows for pdk_id=%s", len(tool_context.state[cache_key]), pdk_id)
         rows = tool_context.state[cache_key]
         filtered = _filter_rows(rows, ppa_filters)
+        logger.info("[query_ppa] filtered %d/%d rows for pdk_id=%s", len(filtered), len(rows), pdk_id)
 
         # Attach PDK version info from cache
         cached_versions = load_versions(tool_context.state)
