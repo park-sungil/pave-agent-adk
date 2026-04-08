@@ -16,7 +16,7 @@ LLM_MODEL_INTERPRET: str = os.getenv("LLM_MODEL_INTERPRET", "") or LLM_MODEL
 LLM_AUTH: str = os.getenv("LLM_AUTH", "key").lower()
 
 # Method "key"
-LLM_API_BASE_KEY: str = os.getenv("LLM_API_BASE_KEY", "")
+LLM_API_BASE: str = os.getenv("LLM_API_BASE", "")
 LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
 
 # Method "header" (vLLM)

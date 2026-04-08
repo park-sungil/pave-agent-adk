@@ -24,8 +24,8 @@ litellm.callbacks.append(_FixAssistantContent())
 # ---------------------------------------------------------------------------
 
 _KEY_AUTH = {
-    "api_base": settings.LLM_API_BASE_KEY,
-    "api_key": settings.LLM_API_KEY,
+    "api_base": settings.LLM_API_BASE or None,
+    "api_key": settings.LLM_API_KEY or None,
 }
 
 
