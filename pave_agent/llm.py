@@ -2,21 +2,39 @@
 
 import litellm
 from google.adk.models.lite_llm import LiteLlm
-from litellm.integrations.custom_logger import CustomLogger
 
 from pave_agent import settings
 
 
-class _FixAssistantContent(CustomLogger):
-    """vLLM rejects assistant tool_call messages without `content` field."""
+# vLLM rejects assistant tool_call messages without `content` field.
+# Monkey-patch litellm.completion / acompletion to inject content=None
+# right before the HTTP call (CustomLogger callback runs too late /
+# may receive a copy of messages instead of the original reference).
 
-    def log_pre_api_call(self, model, messages, kwargs):
-        for msg in messages:
-            if msg.get("role") == "assistant" and "content" not in msg:
-                msg["content"] = None
+_original_completion = litellm.completion
+_original_acompletion = litellm.acompletion
 
 
-litellm.callbacks.append(_FixAssistantContent())
+def _fix_messages(messages):
+    if not messages:
+        return
+    for msg in messages:
+        if msg.get("role") == "assistant" and "content" not in msg:
+            msg["content"] = None
+
+
+def _patched_completion(*args, **kwargs):
+    _fix_messages(kwargs.get("messages"))
+    return _original_completion(*args, **kwargs)
+
+
+async def _patched_acompletion(*args, **kwargs):
+    _fix_messages(kwargs.get("messages"))
+    return await _original_acompletion(*args, **kwargs)
+
+
+litellm.completion = _patched_completion
+litellm.acompletion = _patched_acompletion
 
 
 # ---------------------------------------------------------------------------
