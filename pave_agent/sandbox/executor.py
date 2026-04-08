@@ -110,6 +110,7 @@ def _safe_builtins() -> dict[str, Any]:
     import builtins
 
     allowed = {
+        "__import__",  # required for pandas/numpy lazy submodule imports
         "abs", "all", "any", "bool", "dict", "enumerate", "filter", "float",
         "format", "frozenset", "getattr", "hasattr", "hash", "int", "isinstance",
         "issubclass", "iter", "len", "list", "map", "max", "min", "next",
