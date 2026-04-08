@@ -9,6 +9,7 @@ all parameter combinations with physically plausible measurement values.
 
 from __future__ import annotations
 
+import json
 import math
 import random
 import sqlite3
@@ -31,8 +32,10 @@ def _get_conn() -> sqlite3.Connection:
 
 def query(sql: str, params: dict | None = None) -> list[dict]:
     """Execute SQL and return results as list of dicts."""
-    # Strip schema prefix — SQLite doesn't support schema-qualified names
-    sql = sql.replace("ANTSDB.", "")
+    # Strip schema prefixes — SQLite doesn't support schema-qualified names
+    sql = sql.replace("ANTSDB.", "").replace("AT9.", "")
+    # Translate Oracle FETCH FIRST to SQLite LIMIT
+    sql = sql.replace("FETCH FIRST 1 ROW ONLY", "LIMIT 1")
     conn = _get_conn()
     cursor = conn.execute(sql, params or {})
     columns = [desc[0] for desc in cursor.description]
@@ -58,6 +61,12 @@ def _seed(conn: sqlite3.Connection) -> None:
            VALUES (:PDK_ID, :CELL, :DS, :CORNER, :TEMP, :VDD, :VDD_TYPE, :VTH, :WNS, :WNS_VAL, :CH, :CH_TYPE,
                    :FREQ_GHZ, :D_POWER, :D_ENERGY, :ACCEFF_FF, :ACREFF_KOHM, :S_POWER, :IDDQ_NA)""",
         ppa_rows,
+    )
+    conn.executemany(
+        """INSERT INTO PDKPAS_CONFIG_JSON_FAV
+           (ID, CREATED_AT, CREATED_BY, CONFIG_DATA)
+           VALUES (:ID, :CREATED_AT, :CREATED_BY, :CONFIG_DATA)""",
+        _SEED_CONFIG,
     )
     conn.commit()
 
@@ -106,7 +115,39 @@ CREATE TABLE PAVE_PPA_DATA_VIEW (
 );
 
 CREATE INDEX idx_ppa_pdk_id ON PAVE_PPA_DATA_VIEW(PDK_ID);
+
+CREATE TABLE PDKPAS_CONFIG_JSON_FAV (
+    ID         INTEGER PRIMARY KEY,
+    CREATED_AT TEXT,
+    CREATED_BY TEXT,
+    CONFIG_DATA TEXT
+);
 """
+
+# ---------------------------------------------------------------------------
+# Config seed data (default WNS per project, ch_type)
+# ---------------------------------------------------------------------------
+
+_SEED_CONFIG = [
+    {
+        "ID": 1,
+        "CREATED_AT": "2026-04-01 00:00:00",
+        "CREATED_BY": "admin",
+        "CONFIG_DATA": json.dumps({
+            "ppa_summary_default_wns": [
+                # Solomon EVT1: HP and HD only — uHD missing → omit default
+                {"project": "Solomon EVT1", "HP": "N4", "HD": "N3"},
+                {"project": "Thetis EVT0", "HP": "N4", "HD": "N4", "uHD": "N2"},
+                {"project": "Thetis EVT1", "HP": "N4", "HD": "N4", "uHD": "N2"},
+                {"project": "Ulysses EVT0", "HP": "N4", "HD": "N4", "uHD": "N2"},
+                {"project": "Ulysses EVT1", "HP": "N4", "HD": "N4", "uHD": "N2"},
+                {"project": "Vanguard EVT0", "HP": "N4", "HD": "N4", "uHD": "N2"},
+                # Vanguard EVT1 missing entirely → fallback to lowest WNS
+            ]
+        }),
+    },
+]
+
 
 # ---------------------------------------------------------------------------
 # PDK version seed data

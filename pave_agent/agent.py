@@ -24,10 +24,11 @@ if not _log.handlers:
 
 
 def _init_state(callback_context: CallbackContext) -> None:
-    """Pre-load all PDK versions into session state on first run."""
+    """Pre-load PDK versions and default WNS config into session state on first run."""
     if "_versions_loaded" not in callback_context.state:
-        from pave_agent.tools.query_data import load_versions
+        from pave_agent.tools.query_data import load_default_wns_config, load_versions
         load_versions(callback_context.state)
+        load_default_wns_config(callback_context.state)
         callback_context.state["_versions_loaded"] = True
 
 

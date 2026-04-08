@@ -6,6 +6,7 @@ per PDK into session state, and filters in Python.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -17,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 _VERSION_TABLE = "ANTSDB.PAVE_PDK_VERSION_VIEW"
 _PPA_TABLE = "ANTSDB.PAVE_PPA_DATA_VIEW"
+_CONFIG_TABLE = "AT9.PDKPAS_CONFIG_JSON_FAV"
 _VERSION_CACHE_KEY = f"_cache_{_VERSION_TABLE}"
+_CONFIG_CACHE_KEY = f"_cache_{_CONFIG_TABLE}"
 
 _VERSION_SQL = f"""\
 SELECT PDK_ID, PROCESS, PROJECT, PROJECT_NAME, MASK, DK_GDS,
@@ -36,6 +39,10 @@ SELECT PDK_ID, CELL, DS, CORNER, TEMP, VDD, VDD_TYPE, VTH,
 FROM {_PPA_TABLE}
 WHERE PDK_ID = :pdk_id"""
 
+_CONFIG_SQL = f"""\
+SELECT CONFIG_DATA FROM {_CONFIG_TABLE}
+ORDER BY CREATED_AT DESC FETCH FIRST 1 ROW ONLY"""
+
 _CANDIDATE_COLUMNS = [
     "PDK_ID", "PROCESS", "PROJECT_NAME", "MASK", "DK_GDS",
     "VDD_NOMINAL", "HSPICE", "LVS", "PEX",
@@ -50,6 +57,43 @@ def load_versions(state: dict[str, Any]) -> list[dict[str, Any]]:
         state[_VERSION_CACHE_KEY] = oracle_client.execute_query(_VERSION_SQL)
         logger.info("[init] Loaded %d PDK versions", len(state[_VERSION_CACHE_KEY]))
     return state[_VERSION_CACHE_KEY]
+
+
+def load_default_wns_config(state: dict[str, Any]) -> dict[tuple, dict[str, str]]:
+    """Load default WNS config from DB into session state.
+
+    Returns lookup map: {(project_name, mask): {ch_type: wns}}
+    e.g., {("Solomon", "EVT1"): {"HP": "N4", "HD": "N3"}}
+    """
+    if _CONFIG_CACHE_KEY in state:
+        return state[_CONFIG_CACHE_KEY]
+
+    logger.info("[init] Loading default WNS config from DB")
+    rows = oracle_client.execute_query(_CONFIG_SQL)
+    if not rows:
+        logger.warning("[init] No default WNS config found")
+        state[_CONFIG_CACHE_KEY] = {}
+        return state[_CONFIG_CACHE_KEY]
+
+    config_data = rows[0].get("CONFIG_DATA")
+    if isinstance(config_data, str):
+        config = json.loads(config_data)
+    else:
+        config = config_data or {}
+
+    result: dict[tuple, dict[str, str]] = {}
+    for entry in config.get("ppa_summary_default_wns", []):
+        project = entry.get("project", "")
+        # "Solomon EVT1" → ("Solomon", "EVT1")
+        parts = project.rsplit(" ", 1)
+        if len(parts) == 2:
+            result[(parts[0], parts[1])] = {
+                k: v for k, v in entry.items() if k != "project"
+            }
+
+    state[_CONFIG_CACHE_KEY] = result
+    logger.info("[init] Loaded %d default WNS entries", len(result))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -169,14 +213,27 @@ def query_ppa(
             )
             logger.info("[SQL] loaded %d rows for pdk_id=%s", len(tool_context.state[cache_key]), pdk_id)
         rows = tool_context.state[cache_key]
-        filtered = _filter_rows(rows, ppa_filters)
-        logger.info("[query_ppa] filtered %d/%d rows for pdk_id=%s", len(filtered), len(rows), pdk_id)
 
-        # Attach PDK version info from cache
+        # Look up PDK version info
         cached_versions = load_versions(tool_context.state)
         pdk_info = next((r for r in cached_versions if r.get("PDK_ID") == pdk_id), None)
 
-        result = _summarize(filtered, [pdk_id])
+        # Derive dependencies (cached per pdk_id)
+        deps_key = f"_ppa_deps_{pdk_id}"
+        if deps_key not in tool_context.state:
+            default_wns_map = load_default_wns_config(tool_context.state)
+            project_name = pdk_info.get("PROJECT_NAME") if pdk_info else None
+            mask = pdk_info.get("MASK") if pdk_info else None
+            tool_context.state[deps_key] = _extract_dependencies(
+                rows, default_wns_map, project_name, mask
+            )
+            logger.info("[query_ppa] extracted dependencies for pdk_id=%s", pdk_id)
+        dependencies = tool_context.state[deps_key]
+
+        filtered = _filter_rows(rows, ppa_filters)
+        logger.info("[query_ppa] filtered %d/%d rows for pdk_id=%s", len(filtered), len(rows), pdk_id)
+
+        result = _summarize(filtered, [pdk_id], dependencies)
         if pdk_info:
             result["pdk_info"] = {k: pdk_info[k] for k in _CANDIDATE_COLUMNS if k in pdk_info}
         return result
@@ -192,22 +249,107 @@ def query_ppa(
 def _summarize(
     rows: list[dict[str, Any]],
     pdk_ids: list[int],
+    dependencies: dict[str, Any],
 ) -> dict[str, Any]:
     """Return a summary instead of raw data to keep LLM context small."""
     if not rows:
-        return {"count": 0, "pdk_ids": pdk_ids, "message": "조회 결과 없음."}
-
-    unique = {}
-    for col in ("CELL", "CORNER", "TEMP", "VDD", "VDD_TYPE", "VTH", "DS", "WNS", "CH", "CH_TYPE"):
-        vals = sorted({str(r[col]) for r in rows if col in r})
-        if vals:
-            unique[col] = vals
+        return {
+            "count": 0,
+            "pdk_ids": pdk_ids,
+            "dependencies": dependencies,
+            "message": "조회 결과 없음.",
+        }
 
     return {
         "count": len(rows),
         "pdk_ids": pdk_ids,
-        "unique_values": unique,
-        "message": f"{len(rows)}건 조회됨. analyze에 pdk_ids를 전달하세요.",
+        "dependencies": dependencies,
+        "message": f"{len(rows)}건 조회됨.",
+    }
+
+
+def _extract_dependencies(
+    rows: list[dict[str, Any]],
+    default_wns_map: dict[tuple, dict[str, str]],
+    project_name: str | None,
+    mask: str | None,
+) -> dict[str, Any]:
+    """Extract domain-aware dependencies from cached PDK rows.
+
+    Output structure:
+        {
+            "ch": {ch_name: {ch_type, ds_list, wns_list, default_wns?}},
+            "corner": {corner_name: {vdd_list: [{vdd, vdd_type}, ...]}},
+            "cell": [list],
+            "temp": [list],
+            "vth": [list],
+        }
+    """
+    # Group CH data
+    ch_data: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        ch = r.get("CH")
+        if not ch:
+            continue
+        d = ch_data.setdefault(ch, {
+            "ch_type": r.get("CH_TYPE"),
+            "ds": set(),
+            "wns_map": {},
+        })
+        if r.get("DS"):
+            d["ds"].add(r["DS"])
+        if r.get("WNS"):
+            d["wns_map"][r["WNS"]] = r.get("WNS_VAL")
+
+    # Build CH result with default_wns resolution
+    config_entry = default_wns_map.get((project_name, mask))
+    ch_result: dict[str, dict[str, Any]] = {}
+    for ch_name in sorted(ch_data.keys()):
+        d = ch_data[ch_name]
+        ch_type = d["ch_type"]
+        # Sort WNS by wns_val (lowest first)
+        wns_sorted = sorted(d["wns_map"].keys(), key=lambda w: d["wns_map"][w] or 0)
+
+        entry: dict[str, Any] = {
+            "ch_type": ch_type,
+            "ds_list": sorted(d["ds"]),
+            "wns_list": [{"wns": w, "wns_val": d["wns_map"][w]} for w in wns_sorted],
+        }
+
+        # Resolve default_wns
+        if config_entry is None:
+            # Whole project missing in config → fallback to lowest WNS
+            if wns_sorted:
+                entry["default_wns"] = wns_sorted[0]
+        elif ch_type in config_entry:
+            entry["default_wns"] = config_entry[ch_type]
+        # else: ch_type missing in existing config entry → omit default_wns
+
+        ch_result[ch_name] = entry
+
+    # Group corner → VDD list
+    corner_data: dict[str, dict[str, str]] = {}
+    for r in rows:
+        corner, vdd = r.get("CORNER"), r.get("VDD")
+        if not corner or vdd is None:
+            continue
+        corner_data.setdefault(corner, {})[vdd] = r.get("VDD_TYPE")
+
+    corner_result: dict[str, dict[str, Any]] = {}
+    for corner in sorted(corner_data.keys()):
+        sorted_vdds = sorted(corner_data[corner].keys(), key=lambda v: float(v))
+        corner_result[corner] = {
+            "vdd_list": [
+                {"vdd": v, "vdd_type": corner_data[corner][v]} for v in sorted_vdds
+            ]
+        }
+
+    return {
+        "ch": ch_result,
+        "corner": corner_result,
+        "cell": sorted({r["CELL"] for r in rows if "CELL" in r}),
+        "temp": sorted({r["TEMP"] for r in rows if "TEMP" in r}, key=float),
+        "vth": sorted({r["VTH"] for r in rows if "VTH" in r}),
     }
 
 
