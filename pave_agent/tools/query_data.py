@@ -98,6 +98,11 @@ def load_default_wns_config(state: dict[str, Any]) -> dict[str, dict[str, str]]:
         return state[_CONFIG_CACHE_KEY]
 
     config_data = rows[0].get("CONFIG_DATA")
+    # Oracle CLOB returns a LOB object — read() to get the string content
+    if hasattr(config_data, "read"):
+        config_data = config_data.read()
+    if isinstance(config_data, bytes):
+        config_data = config_data.decode("utf-8")
     if isinstance(config_data, str):
         config = json.loads(config_data)
     else:
