@@ -46,6 +46,11 @@ PDK_ID별 행 수: {pdk_counts}
 - 시각화가 필요하면 `charts` list에 base64 PNG를 추가하세요.
 - 코드만 출력하세요. 설명이나 마크다운 코드블록은 포함하지 마세요.
 - import 문을 작성하지 마세요. pd, np, plt, stats, base64, BytesIO가 이미 있습니다.
+
+## 집중 원칙
+- 분석 요청에 명시된 metric만 계산/시각화하세요.
+- 요청되지 않은 metric(예: 주파수 요청 시 d_power, s_power)에 대한 계산이나 차트는 포함하지 마세요.
+- 여러 metric이 필요한 경우는 사용자가 명시했을 때 (예: "전체 metric", "freq vs power" 등)만 수행하세요.
 """
 
 
