@@ -6,11 +6,13 @@ executes it in a sandbox, and stores results back in session state.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from typing import Any
 
 from google.adk.tools import ToolContext
+from google.genai import types
 
 from pave_agent import llm, settings
 from pave_agent.sandbox import executor
@@ -54,21 +56,22 @@ PDK_ID별 행 수: {pdk_counts}
 """
 
 
-def analyze(
+async def analyze(
     tool_context: ToolContext,
     pdk_ids: list[int],
     analysis_request: str,
 ) -> dict[str, Any]:
     """세션에 저장된 PPA 데이터를 분석하고 수치 결과와 시각화를 생성한다.
 
+    차트는 ADK artifact service에 image/png로 저장되어 adk web UI에서 렌더링됨.
+
     Args:
-        tool_context: ADK tool context (session state).
+        tool_context: ADK tool context (session state + artifact service).
         pdk_ids: 분석할 PDK ID 목록.
         analysis_request: 분석 요청 설명.
 
     Returns:
-        {"result": dict, "charts_count": int, "message": str}.
-        결과는 session state에 _analysis_result로 저장됨.
+        {"result": dict, "charts": [filename...], "message": str}.
     """
     logger.info("[analyze] pdk_ids=%s, analysis_request=%s", pdk_ids, analysis_request)
 
@@ -142,12 +145,35 @@ def analyze(
         logger.warning("Code execution failed")
         return {"error": f"코드 실행 실패:\n{exec_result['error']}"}
 
-    # Store full result in session (including charts)
-    tool_context.state["_analysis_result"] = exec_result
+    # Save charts as artifacts so adk web renders them inline
+    chart_filenames: list[str] = []
+    charts_b64 = exec_result.get("charts") or []
+    for idx, chart_b64 in enumerate(charts_b64, start=1):
+        try:
+            png_bytes = base64.b64decode(chart_b64)
+        except Exception as e:
+            logger.warning("chart #%d base64 decode failed: %s", idx, e)
+            continue
+        filename = f"analysis_chart_{idx}.png"
+        part = types.Part(
+            inline_data=types.Blob(mime_type="image/png", data=png_bytes)
+        )
+        try:
+            await tool_context.save_artifact(filename=filename, artifact=part)
+            chart_filenames.append(filename)
+            logger.info("[analyze] saved chart artifact: %s (%d bytes)", filename, len(png_bytes))
+        except Exception as e:
+            logger.error("Failed to save chart artifact %s: %s", filename, e)
 
-    # Return summary to LLM (without charts — they're too large for context)
+    # Keep numeric result in session (charts are in artifact service already)
+    tool_context.state["_analysis_result"] = {
+        "result": exec_result.get("result", {}),
+        "chart_filenames": chart_filenames,
+    }
+
+    # Return summary to LLM (no base64 data, just artifact filenames)
     return {
         "result": exec_result.get("result", {}),
-        "charts_count": len(exec_result.get("charts", [])),
-        "message": f"분석 완료. 차트 {len(exec_result.get('charts', []))}개 생성됨. 세션에 저장됨.",
+        "charts": chart_filenames,
+        "message": f"분석 완료. 차트 {len(chart_filenames)}개 생성됨.",
     }

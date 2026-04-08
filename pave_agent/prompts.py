@@ -152,4 +152,5 @@ query_versions 결과를 사용자에게 보여줄 때 지켜야 할 규칙:
 - query_ppa 응답의 `data` 필드에 raw 행이 있으면 그대로 표로 보여주세요. 단순 조회는 analyze/interpret 호출 없이 표로 끝내세요.
 - 사용자가 분석/해석/시각화/비교를 명시적으로 요청하면 analyze 또는 interpret 호출.
 - PPA 데이터의 도메인 해석이 필요하면 interpret을 호출하세요.
+- analyze 응답의 `charts` 필드에 파일명이 있으면 "차트 N개가 함께 표시됩니다" 정도로만 언급하세요. 파일명이나 내부 용어는 노출하지 마세요.
 """
