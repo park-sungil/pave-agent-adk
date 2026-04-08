@@ -74,10 +74,14 @@ def analyze(
 
     data: list[dict[str, Any]] = []
     for pdk_id in pdk_ids:
-        key = f"_ppa_data_{pdk_id}"
-        rows = tool_context.state.get(key, [])
+        # Prefer the latest filtered+aggregated result from query_ppa
+        filtered_key = f"_ppa_filtered_{pdk_id}"
+        full_key = f"_ppa_data_{pdk_id}"
+        rows = tool_context.state.get(filtered_key) or tool_context.state.get(full_key, [])
         if not rows:
-            return {"error": f"PDK {pdk_id} 데이터가 세션에 없습니다. 먼저 query_data를 호출하세요."}
+            return {"error": f"PDK {pdk_id} 데이터가 세션에 없습니다. 먼저 query_ppa를 호출하세요."}
+        source = "filtered" if tool_context.state.get(filtered_key) else "full"
+        logger.info("[analyze] pdk_id=%s using %s data (%d rows)", pdk_id, source, len(rows))
         for row in rows:
             data.append({"PDK_ID": pdk_id, **row})
 

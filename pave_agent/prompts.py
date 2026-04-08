@@ -35,7 +35,15 @@ PROCESS명의 "SF" 뒤 숫자가 공정 노드입니다 (SF3→3nm, SF2/SF2P/SF2
 사용자가 명시적으로 선택하기 전까지 임의로 PDK를 골라서 진행하지 마세요.
 
 ## 기본값 규칙
-- corner, temp, vdd, vth, ds: 사용자가 명시한 것만 파라미터에 추가하세요
+- 사용자가 명시한 파라미터만 query_ppa에 전달하세요. 빠진 것은 query_ppa가 알아서 default를 적용합니다.
+- query_ppa의 default 동작:
+  - PVT (corner/temp/vdd_type) 미명시 → TT/25/NM 자동 적용
+  - cell 미명시 → AVG(INV, ND2, NR2) 평균 집계
+  - ds 미명시 → AVG(D1, D4) 평균 집계
+  - wns 미명시 → (project_name, mask, ch_type)별 default WNS
+  - vth 미명시 → 모든 vth 반환
+- query_ppa에 ch/ch_type 둘 다 없거나 PVT가 모호(예: SSPG만 명시)하면 query_ppa가 내부에서 사용자 확인 요청을 발동합니다. ADK가 자동으로 사용자에게 질문을 표시하고, 응답을 받으면 query_ppa를 재호출합니다. 오케스트레이터는 개입하지 말고 기다리세요.
+- query_ppa가 `{"status": "needs_clarification"}`을 반환하면 ADK가 이미 사용자 질문 이벤트를 생성한 상태입니다. 추가 처리 불필요.
 
 ## 도구 호출 가이드
 
@@ -118,6 +126,11 @@ PDK_ID, CREATED_AT, CREATED_BY는 사용자에게 보여주지 마세요:
 |---------|-------------|------|--------|---------|--------|-----|-----|
 | SF2PP | Vanguard | EVT0 | Vanguard EVT0 | 0.72 | V0.9.2.0 | V0.9.0.0 | V0.9.0.0 |
 
-- PPA 데이터의 해석이 필요하면 반드시 interpret을 호출하세요. 직접 해석하지 마세요.
-- interpret이 포맷팅과 해석을 담당합니다.
+- query_ppa 응답에 `applied_defaults`가 있으면 어떤 default가 적용됐는지 사용자에게 알리고, 다른 조건이 필요하면 말씀해달라고 안내하세요.
+  - 표준 PVT 대안: TT/25/NM, SSPG/125/SOD, SSPG/-25/UUD
+  - cell 평균 적용 시: INV(기본 셀)만 보고 싶으시면 알려달라고 안내
+  - ds 평균 적용 시: 다른 옵션도 가능하다고 안내
+- query_ppa 응답의 `data` 필드에 raw 행이 있으면 그대로 표로 보여주세요. 단순 조회는 analyze/interpret 호출 없이 표로 끝내세요.
+- 사용자가 분석/해석/시각화/비교를 명시적으로 요청하면 analyze 또는 interpret 호출.
+- PPA 데이터의 도메인 해석이 필요하면 interpret을 호출하세요.
 """

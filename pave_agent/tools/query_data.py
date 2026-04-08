@@ -49,6 +49,26 @@ _CANDIDATE_COLUMNS = [
     "CREATED_AT", "CREATED_BY",
 ]
 
+# Standard PVT triples (corner, temp, vdd_type)
+_PVT_TRIPLES = [
+    {"corner": "TT", "temp": "25", "vdd_type": "NM"},
+    {"corner": "SSPG", "temp": "125", "vdd_type": "SOD"},
+    {"corner": "SSPG", "temp": "-25", "vdd_type": "UUD"},
+]
+
+# Defaults
+_DEFAULT_CELL_GROUP = ("INV", "ND2", "NR2")
+_DEFAULT_DS_GROUP = ("D1", "D4")
+_CELL_AVG_LABEL = "AVG(INV,ND2,NR2)"
+_DS_AVG_LABEL = "AVG(D1,D4)"
+
+_METRIC_COLUMNS = [
+    "FREQ_GHZ", "D_POWER", "D_ENERGY", "ACCEFF_FF", "ACREFF_KOHM",
+    "S_POWER", "IDDQ_NA",
+]
+
+_RESULT_ROW_LIMIT = 50
+
 
 def load_versions(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Load all PDK versions into session state (called once at session start)."""
@@ -59,11 +79,13 @@ def load_versions(state: dict[str, Any]) -> list[dict[str, Any]]:
     return state[_VERSION_CACHE_KEY]
 
 
-def load_default_wns_config(state: dict[str, Any]) -> dict[tuple, dict[str, str]]:
+def load_default_wns_config(state: dict[str, Any]) -> dict[str, dict[str, str]]:
     """Load default WNS config from DB into session state.
 
-    Returns lookup map: {(project_name, mask): {ch_type: wns}}
-    e.g., {("Solomon", "EVT1"): {"HP": "N4", "HD": "N3"}}
+    Returns lookup map keyed by "{project_name} {mask}" string.
+    e.g., {"Solomon EVT1": {"HP": "N4", "HD": "N3"}}
+
+    String keys (not tuple) so the dict is JSON-serializable for ADK session storage.
     """
     if _CONFIG_CACHE_KEY in state:
         return state[_CONFIG_CACHE_KEY]
@@ -81,13 +103,11 @@ def load_default_wns_config(state: dict[str, Any]) -> dict[tuple, dict[str, str]
     else:
         config = config_data or {}
 
-    result: dict[tuple, dict[str, str]] = {}
+    result: dict[str, dict[str, str]] = {}
     for entry in config.get("ppa_summary_default_wns", []):
-        project = entry.get("project", "")
-        # "Solomon EVT1" → ("Solomon", "EVT1")
-        parts = project.rsplit(" ", 1)
-        if len(parts) == 2:
-            result[(parts[0], parts[1])] = {
+        project = entry.get("project", "").strip()
+        if project:
+            result[project] = {
                 k: v for k, v in entry.items() if k != "project"
             }
 
@@ -156,54 +176,46 @@ def query_ppa(
     ch: str | None = None,
     ch_type: str | None = None,
 ) -> dict[str, Any]:
-    """PPA 측정 데이터를 조회한다. pdk_id 필수.
+    """PPA 측정 데이터를 조회한다. pdk_id 필수, ch 또는 ch_type 필수.
 
-    pdk_id를 모르면 먼저 query_versions로 PDK ID를 확인하세요.
+    빠진 파라미터에 대해 자동으로 default를 적용:
+    - PVT (corner/temp/vdd_type): TT/25/NM 표준 default. 단일 매칭이면 자동 적용. 모호하면 (예: SSPG만) 에러 반환하여 사용자에게 되묻기.
+    - cell: AVG(INV, ND2, NR2) 평균 집계
+    - ds: AVG(D1, D4) 평균 집계
+    - wns: dependencies의 default_wns (ch_type 기준)
+    - vth: 미적용 (모든 vth 반환)
 
     Args:
         tool_context: ADK tool context (session state).
-        pdk_id: 조회할 PDK ID (필수). query_versions 결과에서 확인.
-        cell: 셀 타입 (예: INV, ND2).
+        pdk_id: 조회할 PDK ID (필수).
+        cell: 셀 타입 (예: INV, ND2). 미명시 시 평균.
         corner: 공정 코너 (예: TT, SSPG).
         temp: 온도 (예: -25, 25, 125).
-        vdd: 전압 (예: 0.54, 0.72).
-        vdd_type: 전압 타입 (예: UUD, SUD, UD, NM, OD, SOD).
-        vth: Vth flavor (예: LVT, HVT).
-        ds: 드라이브 스트렝스 (예: D1, D2).
-        wns: nanosheet width (예: N1, N2).
-        ch: cell height (예: CH138, CH148).
-        ch_type: cell height 타입 (예: HP, HD, uHD).
+        vdd: 전압 (예: 0.54, 0.72). 별도 필터로만 사용.
+        vdd_type: 전압 타입 (예: UUD, NM, SOD).
+        vth: Vth flavor (예: LVT, HVT). 미명시 시 모든 vth.
+        ds: 드라이브 스트렝스 (예: D1, D2, D4). 미명시 시 평균.
+        wns: nanosheet width. 미명시 시 default_wns.
+        ch: cell height (예: CH138). ch 또는 ch_type 중 하나 필수.
+        ch_type: cell height 타입 (예: HP, HD, uHD). ch 또는 ch_type 중 하나 필수.
 
     Returns:
-        {"count": int, "pdk_ids": [...], "unique_values": {...}}
-        세션에 _ppa_data_{pdk_id}로 저장됨.
+        {
+            "count": int,                    # 결과 행 수
+            "pdk_ids": [int],
+            "pdk_info": {...},               # PDK 메타
+            "dependencies": {...},           # PDK 옵션 정보
+            "applied_defaults": {...},       # 적용된 default
+            "data": [...],                   # 실제 행 (50개 이하일 때)
+            "message": str
+        }
+        오류 시: {"error": str, "dependencies": {...}}
     """
     logger.info("[query_ppa] pdk_id=%s, cell=%s, corner=%s, temp=%s, vdd=%s, vdd_type=%s, vth=%s, ds=%s, wns=%s, ch=%s, ch_type=%s",
                 pdk_id, cell, corner, temp, vdd, vdd_type, vth, ds, wns, ch, ch_type)
 
     try:
-        ppa_filters: dict[str, Any] = {}
-        if cell is not None:
-            ppa_filters["CELL"] = cell
-        if corner is not None:
-            ppa_filters["CORNER"] = corner
-        if temp is not None:
-            ppa_filters["TEMP"] = temp
-        if vdd is not None:
-            ppa_filters["VDD"] = vdd
-        if vdd_type is not None:
-            ppa_filters["VDD_TYPE"] = vdd_type
-        if vth is not None:
-            ppa_filters["VTH"] = vth
-        if ds is not None:
-            ppa_filters["DS"] = ds
-        if wns is not None:
-            ppa_filters["WNS"] = wns
-        if ch is not None:
-            ppa_filters["CH"] = ch
-        if ch_type is not None:
-            ppa_filters["CH_TYPE"] = ch_type
-
+        # Load full PPA data + version info + dependencies (all cached)
         cache_key = f"_ppa_data_{pdk_id}"
         if cache_key not in tool_context.state:
             logger.info("[SQL] loading full PPA for pdk_id=%s", pdk_id)
@@ -214,11 +226,9 @@ def query_ppa(
             logger.info("[SQL] loaded %d rows for pdk_id=%s", len(tool_context.state[cache_key]), pdk_id)
         rows = tool_context.state[cache_key]
 
-        # Look up PDK version info
         cached_versions = load_versions(tool_context.state)
         pdk_info = next((r for r in cached_versions if r.get("PDK_ID") == pdk_id), None)
 
-        # Derive dependencies (cached per pdk_id)
         deps_key = f"_ppa_deps_{pdk_id}"
         if deps_key not in tool_context.state:
             default_wns_map = load_default_wns_config(tool_context.state)
@@ -230,12 +240,130 @@ def query_ppa(
             logger.info("[query_ppa] extracted dependencies for pdk_id=%s", pdk_id)
         dependencies = tool_context.state[deps_key]
 
+        # ch_type is required (or ch which uniquely determines ch_type)
+        if ch is None and ch_type is None:
+            tool_context.request_confirmation(
+                hint="cell height 타입을 선택해주세요: HP (for big CPU), HD (for mid CPU), uHD (for GPU)",
+                payload={"required_field": "ch_type", "options": ["HP", "HD", "uHD"]},
+            )
+            tool_context.actions.skip_summarization = True
+            return {"status": "needs_clarification"}
+
+        # Resolve PVT
+        pvt, pvt_error = _resolve_pvt(corner, temp, vdd_type)
+        if pvt_error:
+            tool_context.request_confirmation(
+                hint=pvt_error,
+                payload={
+                    "required_field": "pvt",
+                    "options": [
+                        "TT/25/NM",
+                        "SSPG/125/SOD",
+                        "SSPG/-25/UUD",
+                    ],
+                },
+            )
+            tool_context.actions.skip_summarization = True
+            return {"status": "needs_clarification"}
+
+        applied_defaults: dict[str, str] = {}
+        for axis in ("corner", "temp", "vdd_type"):
+            user_val = {"corner": corner, "temp": temp, "vdd_type": vdd_type}[axis]
+            if user_val is None:
+                applied_defaults[axis] = pvt[axis]
+
+        # Build filter dict (use resolved PVT)
+        ppa_filters: dict[str, Any] = {
+            "CORNER": pvt["corner"],
+            "TEMP": pvt["temp"],
+            "VDD_TYPE": pvt["vdd_type"],
+        }
+        if vdd is not None:
+            ppa_filters["VDD"] = vdd
+        if vth is not None:
+            ppa_filters["VTH"] = vth
+        if ch is not None:
+            ppa_filters["CH"] = ch
+        if ch_type is not None:
+            ppa_filters["CH_TYPE"] = ch_type
+
+        # Cell default: AVG(INV,ND2,NR2)
+        if cell is None:
+            ppa_filters["CELL"] = list(_DEFAULT_CELL_GROUP)
+            applied_defaults["cell"] = _CELL_AVG_LABEL
+        else:
+            ppa_filters["CELL"] = cell
+
+        # DS default: AVG(D1,D4)
+        if ds is None:
+            ppa_filters["DS"] = list(_DEFAULT_DS_GROUP)
+            applied_defaults["ds"] = _DS_AVG_LABEL
+        else:
+            ppa_filters["DS"] = ds
+
+        # WNS default: from dependencies (per ch_type)
+        if wns is None:
+            # Find chosen ch_type's default_wns
+            target_ch_type = ch_type
+            if target_ch_type is None and ch is not None:
+                # Look up ch_type from ch
+                ch_entry = dependencies.get("ch", {}).get(ch)
+                if ch_entry:
+                    target_ch_type = ch_entry.get("ch_type")
+            default_wns: str | None = None
+            if target_ch_type:
+                for ch_name, ch_entry in dependencies.get("ch", {}).items():
+                    if ch_entry.get("ch_type") == target_ch_type:
+                        default_wns = ch_entry.get("default_wns")
+                        if default_wns:
+                            break
+            if default_wns:
+                ppa_filters["WNS"] = default_wns
+                applied_defaults["wns"] = default_wns
+
+        # Filter
         filtered = _filter_rows(rows, ppa_filters)
         logger.info("[query_ppa] filtered %d/%d rows for pdk_id=%s", len(filtered), len(rows), pdk_id)
 
-        result = _summarize(filtered, [pdk_id], dependencies)
+        # Aggregate: average over CELL and/or DS if defaulted
+        aggregate_cols: list[str] = []
+        labels: dict[str, str] = {}
+        if cell is None:
+            aggregate_cols.append("CELL")
+            labels["CELL"] = _CELL_AVG_LABEL
+        if ds is None:
+            aggregate_cols.append("DS")
+            labels["DS"] = _DS_AVG_LABEL
+        if aggregate_cols:
+            filtered = _aggregate_avg(filtered, aggregate_cols, _METRIC_COLUMNS, labels)
+            logger.info("[query_ppa] aggregated to %d rows (collapsed: %s)", len(filtered), aggregate_cols)
+
+        # Cache filtered result for analyze
+        tool_context.state[f"_ppa_filtered_{pdk_id}"] = filtered
+
+        # Build response
+        result: dict[str, Any] = {
+            "count": len(filtered),
+            "pdk_ids": [pdk_id],
+            "dependencies": dependencies,
+            "applied_defaults": applied_defaults,
+        }
         if pdk_info:
             result["pdk_info"] = {k: pdk_info[k] for k in _CANDIDATE_COLUMNS if k in pdk_info}
+
+        # Include raw data if small enough; otherwise summary only
+        if len(filtered) == 0:
+            result["data"] = []
+            result["message"] = "조회 결과 없음."
+        elif len(filtered) <= _RESULT_ROW_LIMIT:
+            result["data"] = filtered
+            result["message"] = f"{len(filtered)}건 조회됨."
+        else:
+            result["message"] = (
+                f"{len(filtered)}건 조회됨 (>{_RESULT_ROW_LIMIT}행). "
+                f"raw data는 생략. 분석이 필요하면 analyze를 호출하세요."
+            )
+
         return result
     except Exception as e:
         logger.error("query_ppa failed: %s", e, exc_info=True)
@@ -246,31 +374,96 @@ def query_ppa(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _summarize(
-    rows: list[dict[str, Any]],
-    pdk_ids: list[int],
-    dependencies: dict[str, Any],
-) -> dict[str, Any]:
-    """Return a summary instead of raw data to keep LLM context small."""
-    if not rows:
-        return {
-            "count": 0,
-            "pdk_ids": pdk_ids,
-            "dependencies": dependencies,
-            "message": "조회 결과 없음.",
-        }
+def _resolve_pvt(
+    corner: str | None,
+    temp: float | str | None,
+    vdd_type: str | None,
+) -> tuple[dict[str, str] | None, str | None]:
+    """Resolve user PVT input against standard triples.
 
-    return {
-        "count": len(rows),
-        "pdk_ids": pdk_ids,
-        "dependencies": dependencies,
-        "message": f"{len(rows)}건 조회됨.",
+    Returns (resolved_dict, error_or_none):
+    - Nothing specified → default T1 (TT/25/NM)
+    - Unique match against standard → that triple
+    - Multiple matches (e.g., 'SSPG' alone) → None + error message
+    - No standard match but user specified explicitly → fill missing axes with T1 defaults
+    """
+    user = {
+        "corner": str(corner) if corner is not None else None,
+        "temp": str(temp) if temp is not None else None,
+        "vdd_type": str(vdd_type).upper() if vdd_type is not None else None,
     }
+
+    if all(v is None for v in user.values()):
+        return _PVT_TRIPLES[0], None
+
+    matches = [
+        t for t in _PVT_TRIPLES
+        if all(user[k] is None or user[k] == t[k] for k in user)
+    ]
+
+    if len(matches) == 1:
+        return matches[0], None
+
+    if len(matches) > 1:
+        options = ", ".join(
+            f"{t['corner']}/{t['temp']}/{t['vdd_type']}" for t in matches
+        )
+        return None, (
+            f"PVT 조건이 모호합니다. 사용자에게 다음 중 어느 표준 조건을 원하는지 확인해주세요: {options}"
+        )
+
+    # No standard match — fill missing axes with T1 defaults
+    t1 = _PVT_TRIPLES[0]
+    return {
+        "corner": user["corner"] or t1["corner"],
+        "temp": user["temp"] or t1["temp"],
+        "vdd_type": user["vdd_type"] or t1["vdd_type"],
+    }, None
+
+
+def _aggregate_avg(
+    rows: list[dict[str, Any]],
+    aggregate_cols: list[str],
+    metric_cols: list[str],
+    labels: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Average metric_cols across rows, grouping by all columns except aggregate_cols.
+
+    aggregate_cols: columns to collapse (e.g., ['CELL'])
+    metric_cols: numeric columns to average
+    labels: replacement values for collapsed columns (e.g., {'CELL': 'AVG(INV,ND2,NR2)'})
+    """
+    if not rows:
+        return []
+
+    all_cols = list(rows[0].keys())
+    group_cols = [c for c in all_cols if c not in aggregate_cols and c not in metric_cols]
+
+    groups: dict[tuple, dict[str, Any]] = {}
+    for r in rows:
+        key = tuple(r.get(c) for c in group_cols)
+        if key not in groups:
+            entry: dict[str, Any] = {c: r.get(c) for c in group_cols}
+            entry.update(labels)
+            entry.update({c: [] for c in metric_cols})
+            groups[key] = entry
+        for c in metric_cols:
+            v = r.get(c)
+            if v is not None:
+                groups[key][c].append(v)
+
+    result = []
+    for entry in groups.values():
+        for c in metric_cols:
+            vals = entry[c]
+            entry[c] = sum(vals) / len(vals) if vals else None
+        result.append(entry)
+    return result
 
 
 def _extract_dependencies(
     rows: list[dict[str, Any]],
-    default_wns_map: dict[tuple, dict[str, str]],
+    default_wns_map: dict[str, dict[str, str]],
     project_name: str | None,
     mask: str | None,
 ) -> dict[str, Any]:
@@ -302,7 +495,8 @@ def _extract_dependencies(
             d["wns_map"][r["WNS"]] = r.get("WNS_VAL")
 
     # Build CH result with default_wns resolution
-    config_entry = default_wns_map.get((project_name, mask))
+    config_key = f"{project_name} {mask}" if project_name and mask else ""
+    config_entry = default_wns_map.get(config_key)
     ch_result: dict[str, dict[str, Any]] = {}
     for ch_name in sorted(ch_data.keys()):
         d = ch_data[ch_name]
