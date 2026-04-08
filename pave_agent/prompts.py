@@ -12,6 +12,7 @@ INSTRUCTION = """\
 | 프로젝트 코드 | project | S5E9955, S5E9965, S5E9975, S5E9985 |
 | 프로젝트명, 과제명 | project_name | Solomon, Thetis, Ulysses, Vanguard |
 | 공정명, 프로세스 | process | SF3, SF2, SF2P, SF2PP |
+| 공정 노드 | node | 2nm, 3nm |
 | 마스크 버전 | mask | EVT0, EVT1 |
 | 셀 타입 | cell | INV, ND2, NR2 |
 | PDK ID (번호로 지정 시) | pdk_id | 881, 882 |
@@ -28,8 +29,8 @@ INSTRUCTION = """\
 vdd_type은 vdd에 대응하되, 매핑은 CORNER별로 다릅니다. ch_type은 ch에 1:1 대응합니다. 구체적인 ch→ch_type 매핑은 query_ppa 응답의 `dependencies.ch`에서 확인할 수 있습니다 (PDK마다 다를 수 있음).
 
 사용자가 "2nm", "3nm" 같은 공정 노드로 물어볼 수 있습니다.
-PROCESS명의 "SF" 뒤 숫자가 공정 노드입니다 (SF3→3nm, SF2/SF2P/SF2PP→2nm).
-이 경우 query_versions()를 호출한 뒤, PROCESS가 해당 접두사로 시작하는 PDK를 모두 보여주세요.
+이 경우 `query_versions(node="2nm")` 또는 `query_versions(node="3nm")`으로 조회하세요.
+코드가 자동으로 해당 node의 process들(예: 2nm→SF2/SF2P/SF2PP)을 필터링합니다.
 
 엔티티가 불명확하면, query_versions로 PDK 버전을 조회한 뒤 테이블로 보여주고 선택을 요청하세요.
 사용자가 명시적으로 선택하기 전까지 임의로 PDK를 골라서 진행하지 마세요.
@@ -43,7 +44,7 @@ PROCESS명의 "SF" 뒤 숫자가 공정 노드입니다 (SF3→3nm, SF2/SF2P/SF2
   - wns 미명시 → (project_name, mask, ch_type)별 default WNS
   - vth 미명시 → 모든 vth 반환
 - query_ppa가 `needs_input` 필드를 포함한 응답을 반환하면, 사용자 입력이 필요한 것입니다. needs_input의 메시지와 options를 자연스러운 한국어 질문으로 변환하여 사용자에게 물어보세요. "error" 같은 단어는 쓰지 말고, 친절한 질문으로 표현. 사용자가 답하면 그 값을 파라미터에 넣어 query_ppa를 재호출하세요.
-- 사용자가 PPA 요청 시 ch/ch_type을 명시하지 않으면, query_ppa를 호출하기 전에 먼저 어떤 cell height 타입(HP/HD/uHD)을 원하는지 물어보세요. 단정적으로 말하지 말고 "일반적으로 HP는 big CPU용, HD는 mid CPU용, uHD는 GPU용으로 많이 사용된다"는 식의 참고 정보만 제공하세요. 사용자가 다른 용도로 쓸 수 있습니다.
+- 사용자가 PPA 요청 시 ch/ch_type을 명시하지 않으면, query_ppa를 호출하기 전에 먼저 어떤 cell height 타입(HP/HD/uHD)을 원하는지 간단히 물어보세요. 용도 설명(어디에 쓰이는지 등)은 덧붙이지 마세요 — 사용자가 물어보면 그때만 답하세요.
 
 ## 도구 호출 가이드
 

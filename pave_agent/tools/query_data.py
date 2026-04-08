@@ -69,6 +69,12 @@ _METRIC_COLUMNS = [
 
 _RESULT_ROW_LIMIT = 50
 
+# Node → list of processes (hardcoded; not in DB)
+_NODE_PROCESSES = {
+    "2nm": ["SF2", "SF2P", "SF2PP"],
+    "3nm": ["SF3"],
+}
+
 
 def load_versions(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Load all PDK versions into session state (called once at session start)."""
@@ -131,6 +137,7 @@ def query_versions(
     project_name: str | None = None,
     process: str | None = None,
     mask: str | None = None,
+    node: str | None = None,
 ) -> dict[str, Any]:
     """PDK 버전 목록을 조회한다.
 
@@ -140,6 +147,8 @@ def query_versions(
         project_name: 프로젝트명 (예: Vanguard).
         process: 공정명 (예: SF2PP).
         mask: 마스크 버전 (예: EVT0).
+        node: 공정 노드. "2nm" → SF2/SF2P/SF2PP, "3nm" → SF3.
+            process와 동시 사용 불필요.
 
     Returns:
         {"data": [...], "count": int}
@@ -154,11 +163,22 @@ def query_versions(
     if mask is not None:
         filters["MASK"] = mask
 
-    logger.info("[query_versions] filters=%s", filters)
+    logger.info("[query_versions] filters=%s, node=%s", filters, node)
 
     try:
         all_rows = load_versions(tool_context.state)
         filtered = _filter_rows(all_rows, filters)
+
+        # Node filter: restrict to processes belonging to the node
+        if node is not None:
+            node_key = node.lower()
+            processes = _NODE_PROCESSES.get(node_key)
+            if processes is None:
+                return {
+                    "error": f"알 수 없는 node: {node}. 사용 가능한 옵션: {', '.join(_NODE_PROCESSES.keys())}",
+                }
+            filtered = [r for r in filtered if r.get("PROCESS") in processes]
+
         results = [{"IDX": i, **row} for i, row in enumerate(filtered, 1)]
         logger.info("[query_versions] returned %d rows", len(results))
         return {"data": results, "count": len(results)}
@@ -262,20 +282,26 @@ def query_ppa(
                 "dependencies": dependencies,
             }
 
+        # If user provided raw vdd, don't default vdd_type — vdd already
+        # pins the voltage, adding a vdd_type filter would over-constrain.
+        user_specified_vdd = vdd is not None
         applied_defaults: dict[str, str] = {}
-        for axis in ("corner", "temp", "vdd_type"):
-            user_val = {"corner": corner, "temp": temp, "vdd_type": vdd_type}[axis]
-            if user_val is None:
-                applied_defaults[axis] = pvt[axis]
+        if corner is None:
+            applied_defaults["corner"] = pvt["corner"]
+        if temp is None:
+            applied_defaults["temp"] = pvt["temp"]
+        if vdd_type is None and not user_specified_vdd:
+            applied_defaults["vdd_type"] = pvt["vdd_type"]
 
-        # Build filter dict (use resolved PVT)
+        # Build filter dict
         ppa_filters: dict[str, Any] = {
             "CORNER": pvt["corner"],
             "TEMP": pvt["temp"],
-            "VDD_TYPE": pvt["vdd_type"],
         }
-        if vdd is not None:
+        if user_specified_vdd:
             ppa_filters["VDD"] = vdd
+        else:
+            ppa_filters["VDD_TYPE"] = pvt["vdd_type"]
         if vth is not None:
             ppa_filters["VTH"] = vth
         if ch is not None:
