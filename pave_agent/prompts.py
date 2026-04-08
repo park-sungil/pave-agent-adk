@@ -68,11 +68,12 @@ vdd_type은 vdd에 대응하되, 매핑은 CORNER별로 다릅니다. ch_type은
 2. query_ppa로 데이터 조회
 3. interpret으로 해석
 
-예: "Vanguard의 SSPG/0.54V/-25°C에서 LVT INV 주파수가 얼마야?"
-→ query_versions(project_name="Vanguard") — PDK ID 확인
+예:
+→ query_versions(...사용자가 언급한 필터만...) — PDK ID 확인
 → 사용자가 PDK 선택 (또는 1개면 자동)
-→ query_ppa(pdk_id=901, cell="INV", corner="SSPG", vdd=0.54, temp=-25, vth="LVT")
+→ query_ppa(pdk_id=확정된_ID, ...사용자가 명시한 파라미터만...)
 → interpret(data, question)
+사용자가 명시하지 않은 파라미터는 절대 전달하지 마세요. query_ppa가 default를 알아서 적용합니다.
 
 ### PDK 1:1 벤치마킹
 두 PDK 버전의 PPA를 비교할 때:
@@ -81,11 +82,11 @@ vdd_type은 vdd에 대응하되, 매핑은 CORNER별로 다릅니다. ch_type은
 3. analyze로 delta/% 변화 분석
 4. interpret으로 해석
 
-예: "Ulysses EVT0 vs EVT1 INV 비교해줘"
-→ query_versions(project_name="Ulysses") — PDK ID 확인 (예: EVT0=901, EVT1=912)
-→ query_ppa(pdk_id=901, cell="INV") — 데이터 조회
-→ query_ppa(pdk_id=912, cell="INV") — 데이터 조회
-→ analyze(pdk_ids=[901, 912], analysis_request="두 PDK 간 메트릭별 delta 및 % 변화 분석")
+예:
+→ query_versions(...사용자가 언급한 필터만...) — 두 PDK ID 확인
+→ query_ppa(pdk_id=PDK_A, ...사용자가 명시한 파라미터만...)
+→ query_ppa(pdk_id=PDK_B, ...사용자가 명시한 파라미터만...)
+→ analyze(pdk_ids=[PDK_A, PDK_B], analysis_request="사용자 요청에 맞춘 분석 설명")
 → interpret(분석결과, question)
 
 ### PDK 버전 선택
@@ -146,7 +147,7 @@ query_versions 결과를 사용자에게 보여줄 때 지켜야 할 규칙:
 
 - query_ppa 응답에 `applied_defaults`가 있으면 어떤 default가 적용됐는지 사용자에게 알리고, 다른 조건이 필요하면 말씀해달라고 안내하세요.
   - 표준 PVT 대안: TT/25/NM, SSPG/125/SOD, SSPG/-25/SUD
-  - cell 평균 적용 시: INV(기본 셀)만 보고 싶으시면 알려달라고 안내
+  - cell 평균 적용 시: 특정 셀(INV, ND2, NR2 등)만 보고 싶으면 알려달라고 안내
   - ds 평균 적용 시: 다른 옵션도 가능하다고 안내
 - query_ppa 응답의 `data` 필드에 raw 행이 있으면 그대로 표로 보여주세요. 단순 조회는 analyze/interpret 호출 없이 표로 끝내세요.
 - 사용자가 분석/해석/시각화/비교를 명시적으로 요청하면 analyze 또는 interpret 호출.
