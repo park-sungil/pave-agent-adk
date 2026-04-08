@@ -53,7 +53,7 @@ _CANDIDATE_COLUMNS = [
 _PVT_TRIPLES = [
     {"corner": "TT", "temp": "25", "vdd_type": "NM"},
     {"corner": "SSPG", "temp": "125", "vdd_type": "SOD"},
-    {"corner": "SSPG", "temp": "-25", "vdd_type": "UUD"},
+    {"corner": "SSPG", "temp": "-25", "vdd_type": "SUD"},
 ]
 
 # Defaults
@@ -258,7 +258,7 @@ def query_ppa(
         if pvt_error:
             return {
                 "needs_input": pvt_error,
-                "options": ["TT/25/NM", "SSPG/125/SOD", "SSPG/-25/UUD"],
+                "options": ["TT/25/NM", "SSPG/125/SOD", "SSPG/-25/SUD"],
                 "dependencies": dependencies,
             }
 

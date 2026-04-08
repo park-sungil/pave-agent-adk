@@ -127,7 +127,7 @@ PDK_ID, CREATED_AT, CREATED_BY는 사용자에게 보여주지 마세요:
 | SF2PP | Vanguard | EVT0 | Vanguard EVT0 | 0.72 | V0.9.2.0 | V0.9.0.0 | V0.9.0.0 |
 
 - query_ppa 응답에 `applied_defaults`가 있으면 어떤 default가 적용됐는지 사용자에게 알리고, 다른 조건이 필요하면 말씀해달라고 안내하세요.
-  - 표준 PVT 대안: TT/25/NM, SSPG/125/SOD, SSPG/-25/UUD
+  - 표준 PVT 대안: TT/25/NM, SSPG/125/SOD, SSPG/-25/SUD
   - cell 평균 적용 시: INV(기본 셀)만 보고 싶으시면 알려달라고 안내
   - ds 평균 적용 시: 다른 옵션도 가능하다고 안내
 - query_ppa 응답의 `data` 필드에 raw 행이 있으면 그대로 표로 보여주세요. 단순 조회는 analyze/interpret 호출 없이 표로 끝내세요.
