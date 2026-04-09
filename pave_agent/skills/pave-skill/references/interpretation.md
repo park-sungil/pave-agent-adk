@@ -28,17 +28,21 @@
 ### 3. 벤치마킹 비교 (두 PDK 간 비교)
 예: "A PDK vs B PDK", "3nm → 2nm 변화"
 
+벤치마킹은 반드시 아래 3개 섹션을 **모두** 포함한다:
+
 **Summary**
 - 핵심 변화를 1~3줄로 요약
 - 사용자가 명시한 metric 중심 (불필요한 metric 언급 금지)
 
 **Table**
 - Metric, A 값, B 값, Delta, Delta(%)
-- analyze가 제공한 숫자 그대로 사용
+- analyze가 제공한 숫자 그대로 사용 (절대 재계산 금지)
 
-**Technical Insight** (사용자가 해석을 원할 때만)
-- BSIM-CMG 등 도메인 지식으로 변화의 원인 설명
-- trade-off 언급은 사용자가 물어본 metric 내에서만
+**Technical Insight**
+- 주입된 도메인 지식(특히 섹션 3, 5, 6) 또는 BSIM-CMG 등의 공학 지식을 활용해 변화의 **원인**을 1~3문단으로 설명
+- "왜 이 방향으로 변했는가"를 짧게 해석 (예: "VTH가 낮아져 gate overdrive 증가 → FREQ 향상, 동시에 leakage exponential 증가")
+- trade-off 언급은 사용자가 물어본 metric 범위 내에서만
+- 사용자가 "그냥 표만 보여줘" 같이 명시적으로 insight를 원하지 않는다고 말한 경우에만 이 섹션을 생략
 
 ### 4. 전체 요약 요청
 예: "전체 보여줘", "전반적으로 어때"

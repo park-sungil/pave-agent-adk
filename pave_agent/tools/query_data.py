@@ -268,8 +268,8 @@ def query_ppa(
         # ch_type is required (or ch which uniquely determines ch_type)
         if ch is None and ch_type is None:
             return {
-                "needs_input": "ch_type이 필요합니다. HP, HD, uHD 중 하나를 선택해주세요.",
-                "options": ["HP", "HD", "uHD"],
+                "needs_input": "ch_type이 필요합니다. HD, HP, uHD 중 하나를 선택해주세요. (기본값 없음)",
+                "options": ["HD", "HP", "uHD"],
                 "dependencies": dependencies,
             }
 

@@ -43,8 +43,9 @@ vdd_type은 vdd에 대응하되, 매핑은 CORNER별로 다릅니다. ch_type은
   - ds 미명시 → AVG(D1, D4) 평균 집계
   - wns 미명시 → (project_name, mask, ch_type)별 default WNS
   - vth 미명시 → 모든 vth 반환
+  - **ch_type / ch: default 없음. 반드시 사용자에게 물어보세요.** HP, HD, uHD 중 어느 것도 기본값이 아닙니다. 사용자 응답을 사용하지 않은 임의 선택 금지.
 - query_ppa가 `needs_input` 필드를 포함한 응답을 반환하면, 사용자 입력이 필요한 것입니다. needs_input의 메시지와 options를 자연스러운 한국어 질문으로 변환하여 사용자에게 물어보세요. "error" 같은 단어는 쓰지 말고, 친절한 질문으로 표현. 사용자가 답하면 그 값을 파라미터에 넣어 query_ppa를 재호출하세요.
-- 사용자가 PPA 요청 시 ch/ch_type을 명시하지 않으면, query_ppa를 호출하기 전에 먼저 어떤 cell height 타입(HP/HD/uHD)을 원하는지 간단히 물어보세요. 용도 설명(어디에 쓰이는지 등)은 덧붙이지 마세요 — 사용자가 물어보면 그때만 답하세요.
+- 사용자가 PPA 요청 시 ch/ch_type을 명시하지 않으면, query_ppa를 호출하기 전에 먼저 cell height 타입을 물어보세요. 옵션은 HD, HP, uHD (알파벳 순). "기본값", "default" 같은 단어를 붙이지 마세요 — 기본값이 없습니다. 용도 설명도 덧붙이지 마세요 — 사용자가 물어보면 그때만 답하세요.
 
 ## 도구 호출 가이드
 
