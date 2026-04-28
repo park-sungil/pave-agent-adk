@@ -69,6 +69,65 @@ _METRIC_COLUMNS = [
 
 _RESULT_ROW_LIMIT = 50
 
+# Precision for markdown table formatting
+_METRIC_PRECISION = {
+    "FREQ_GHZ": 4,
+    "D_POWER": 6,
+    "D_ENERGY": 4,
+    "ACCEFF_FF": 2,
+    "ACREFF_KOHM": 4,
+    "S_POWER": 8,
+    "IDDQ_NA": 4,
+}
+
+
+def _format_table(rows: list[dict[str, Any]]) -> str:
+    """Format filtered rows as a markdown table for orchestrator to relay.
+
+    - Skips columns where all rows have the same value (constant columns)
+    - Rounds numeric metrics to sensible precision
+    - Returns ready-to-display markdown string
+    """
+    if not rows:
+        return "(데이터 없음)"
+
+    all_cols = list(rows[0].keys())
+
+    # Determine which columns vary across rows
+    varying_cols = []
+    for col in all_cols:
+        vals = {str(r.get(col)) for r in rows}
+        if len(vals) > 1:
+            varying_cols.append(col)
+
+    # Always include metric columns even if constant (user wants to see values)
+    for col in _METRIC_COLUMNS:
+        if col in all_cols and col not in varying_cols:
+            varying_cols.append(col)
+
+    if not varying_cols:
+        varying_cols = all_cols
+
+    # Build header
+    header = "| " + " | ".join(varying_cols) + " |"
+    separator = "| " + " | ".join("---" for _ in varying_cols) + " |"
+
+    # Build rows
+    lines = [header, separator]
+    for row in rows:
+        cells = []
+        for col in varying_cols:
+            val = row.get(col)
+            if val is None:
+                cells.append("-")
+            elif col in _METRIC_PRECISION and isinstance(val, (int, float)):
+                cells.append(f"{val:.{_METRIC_PRECISION[col]}f}")
+            else:
+                cells.append(str(val))
+        lines.append("| " + " | ".join(cells) + " |")
+
+    return "\n".join(lines)
+
 # Node → list of processes (hardcoded; not in DB)
 _NODE_PROCESSES = {
     "2nm": ["SF2", "SF2P", "SF2PP"],
@@ -373,17 +432,18 @@ def query_ppa(
         if pdk_info:
             result["pdk_info"] = {k: pdk_info[k] for k in _CANDIDATE_COLUMNS if k in pdk_info}
 
-        # Include raw data if small enough; otherwise summary only
+        # Return pre-formatted markdown table (not raw data) so the
+        # orchestrator LLM can relay it without touching numbers.
         if len(filtered) == 0:
-            result["data"] = []
+            result["table"] = "(조회 결과 없음)"
             result["message"] = "조회 결과 없음."
         elif len(filtered) <= _RESULT_ROW_LIMIT:
-            result["data"] = filtered
+            result["table"] = _format_table(filtered)
             result["message"] = f"{len(filtered)}건 조회됨."
         else:
             result["message"] = (
                 f"{len(filtered)}건 조회됨 (>{_RESULT_ROW_LIMIT}행). "
-                f"raw data는 생략. 분석이 필요하면 analyze를 호출하세요."
+                f"분석이 필요하면 analyze를 호출하세요."
             )
 
         return result

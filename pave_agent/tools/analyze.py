@@ -1,7 +1,9 @@
-"""analyze tool: LLM-powered data analysis with code sandbox.
+"""analyze tool: deterministic fast path + LLM fallback.
 
-Reads PPA data from session state, generates Python analysis code via LLM,
-executes it in a sandbox, and stores results back in session state.
+For known patterns (PDK benchmarking, simple stats, groupby), uses
+deterministic Python functions — no LLM call, <100ms. Falls back to
+LLM code generation + sandbox execution for ad-hoc requests, with
+one retry on execution failure.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from google.adk.tools import ToolContext
 
 from pave_agent import llm, settings
 from pave_agent.sandbox import executor
+from pave_agent.tools import deterministic_analysis as det
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +33,10 @@ _CODE_GEN_PROMPT = """당신은 데이터를 분석하는 Python 코드 생성�
 
 컬럼: {columns}
 PDK_ID별 행 수: {pdk_counts}
-고유 값:
+고유 값 (변하는 컬럼만):
 {unique_values}
 
-처음 3행 미리보기:
+처음 2행 미리보기:
 ```json
 {data_preview}
 ```
@@ -48,37 +51,126 @@ PDK_ID별 행 수: {pdk_counts}
 - import 문을 작성하지 마세요. pd, np, stats가 이미 있습니다.
 
 ## 집중 원칙
-- 분석 요청에 명시된 metric만 계산/시각화하세요.
-- 요청되지 않은 metric(예: 주파수 요청 시 d_power, s_power)에 대한 계산이나 차트는 포함하지 마세요.
-- 여러 metric이 필요한 경우는 사용자가 명시했을 때 (예: "전체 metric", "freq vs power" 등)만 수행하세요.
+- 분석 요청에 명시된 metric만 계산하세요.
+- 요청되지 않은 metric에 대한 계산은 포함하지 마세요.
+"""
+
+_REPAIR_PROMPT = """이전에 생성한 코드에서 에러가 발생했습니다.
+
+## 에러
+{error}
+
+## 원래 코드
+{original_code}
+
+에러를 수정한 코드를 작성하세요. 코드만 출력하세요.
 """
 
 
-def analyze(
-    tool_context: ToolContext,
-    pdk_ids: list[int],
-    analysis_request: str,
-) -> dict[str, Any]:
-    """세션에 저장된 PPA 데이터를 분석하고 수치 결과를 반환한다.
+# ---------------------------------------------------------------------------
+# Pattern detection
+# ---------------------------------------------------------------------------
 
-    Args:
-        tool_context: ADK tool context (session state).
-        pdk_ids: 분석할 PDK ID 목록.
-        analysis_request: 분석 요청 설명.
+def _detect_pattern(pdk_ids: list[int], analysis_request: str) -> str | None:
+    """Detect known analysis pattern from inputs."""
+    req = analysis_request.lower()
 
-    Returns:
-        {"result": dict, "message": str}.
-    """
-    logger.info("[analyze] pdk_ids=%s, analysis_request=%s", pdk_ids, analysis_request)
+    # Two PDKs = benchmarking (dominant use case, 80%+)
+    if len(pdk_ids) == 2:
+        return "benchmark"
 
-    if isinstance(pdk_ids, (int, float)):
-        pdk_ids = [int(pdk_ids)]
-    elif not isinstance(pdk_ids, list):
-        return {"error": "pdk_ids must be a list of integers."}
+    if any(kw in req for kw in ("평균", "mean", "std", "통계", "stats", "min", "max")):
+        return "stats"
 
+    if any(kw in req for kw in ("그룹", "group", "별 평균", "별 통계")):
+        return "groupby"
+
+    return None
+
+
+def _extract_metrics_from_request(analysis_request: str) -> list[str] | None:
+    """Extract specific metric names if mentioned in the request."""
+    req = analysis_request.upper()
+    found = [m for m in det._METRIC_COLUMNS if m in req]
+    return found if found else None
+
+
+def _format_result(result: dict[str, Any], pattern: str | None = None) -> str:
+    """Format analysis result as markdown text for the orchestrator to relay."""
+    if "error" in result:
+        return result["error"]
+
+    if pattern == "benchmark" and "comparison" in result:
+        return _format_benchmark(result)
+
+    if pattern == "stats":
+        return _format_stats(result)
+
+    # Fallback: JSON
+    return f"```json\n{json.dumps(result, indent=2, ensure_ascii=False, default=str)}\n```"
+
+
+def _format_benchmark(result: dict[str, Any]) -> str:
+    """Format benchmark delta result as markdown table."""
+    comparison = result.get("comparison", [])
+    summary = result.get("summary", {})
+    pdk_a = result.get("pdk_a", "A")
+    pdk_b = result.get("pdk_b", "B")
+
+    if not summary:
+        return "매칭된 데이터가 없습니다."
+
+    lines = [f"### PDK {pdk_a} vs {pdk_b} 비교 ({result.get('matched_count', 0)}건 매칭)\n"]
+
+    # Summary table
+    lines.append("| Metric | PDK A 평균 | PDK B 평균 | Delta | Delta(%) |")
+    lines.append("|--------|-----------|-----------|-------|----------|")
+
+    for metric, stats in summary.items():
+        # Compute A and B averages from comparison
+        a_vals = [r.get(f"{metric}_A") for r in comparison if r.get(f"{metric}_A") is not None]
+        b_vals = [r.get(f"{metric}_B") for r in comparison if r.get(f"{metric}_B") is not None]
+        a_avg = sum(a_vals) / len(a_vals) if a_vals else None
+        b_avg = sum(b_vals) / len(b_vals) if b_vals else None
+        delta = stats.get("avg_delta")
+        pct = stats.get("avg_pct")
+
+        a_str = f"{a_avg:.4f}" if a_avg is not None else "-"
+        b_str = f"{b_avg:.4f}" if b_avg is not None else "-"
+        d_str = f"{delta:+.4f}" if delta is not None else "-"
+        p_str = f"{pct:+.2f}%" if pct is not None else "-"
+        lines.append(f"| {metric} | {a_str} | {b_str} | {d_str} | {p_str} |")
+
+    return "\n".join(lines)
+
+
+def _format_stats(result: dict[str, Any]) -> str:
+    """Format simple stats as markdown table."""
+    if not result:
+        return "통계 데이터가 없습니다."
+
+    lines = ["| Metric | Mean | Std | Min | Max | Count |"]
+    lines.append("|--------|------|-----|-----|-----|-------|")
+
+    for metric, stats in result.items():
+        if not isinstance(stats, dict):
+            continue
+        lines.append(
+            f"| {metric} | {stats.get('mean', '-'):.4f} | {stats.get('std', '-'):.4f} "
+            f"| {stats.get('min', '-'):.4f} | {stats.get('max', '-'):.4f} "
+            f"| {stats.get('count', '-')} |"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Main tool function
+# ---------------------------------------------------------------------------
+
+def _load_data(tool_context: ToolContext, pdk_ids: list[int]) -> list[dict[str, Any]] | dict[str, Any]:
+    """Load data from session state. Returns list of rows or error dict."""
     data: list[dict[str, Any]] = []
     for pdk_id in pdk_ids:
-        # Prefer the latest filtered+aggregated result from query_ppa
         filtered_key = f"_ppa_filtered_{pdk_id}"
         full_key = f"_ppa_data_{pdk_id}"
         rows = tool_context.state.get(filtered_key) or tool_context.state.get(full_key, [])
@@ -91,19 +183,98 @@ def analyze(
 
     if not data:
         return {"error": "분석할 데이터가 없습니다."}
+    return data
 
-    # Build context for LLM
+
+def analyze(
+    tool_context: ToolContext,
+    pdk_ids: list[int],
+    analysis_request: str,
+) -> dict[str, Any]:
+    """세션에 저장된 PPA 데이터를 분석하고 수치 결과를 반환한다.
+
+    결정적 패턴 (benchmark, stats, groupby)은 LLM 없이 즉시 실행.
+    그 외 ad-hoc 요청은 LLM 코드 생성 + sandbox 실행 (1회 retry).
+
+    Args:
+        tool_context: ADK tool context (session state).
+        pdk_ids: 분석할 PDK ID 목록.
+        analysis_request: 분석 요청 설명.
+
+    Returns:
+        {"formatted_result": str, "message": str}.
+    """
+    logger.info("[analyze] pdk_ids=%s, analysis_request=%s", pdk_ids, analysis_request)
+
+    if isinstance(pdk_ids, (int, float)):
+        pdk_ids = [int(pdk_ids)]
+    elif not isinstance(pdk_ids, list):
+        return {"error": "pdk_ids must be a list of integers."}
+
+    # Load data from session
+    data = _load_data(tool_context, pdk_ids)
+    if isinstance(data, dict) and "error" in data:
+        return data
+
+    # Detect pattern for fast path
+    pattern = _detect_pattern(pdk_ids, analysis_request)
+    logger.info("[analyze] detected pattern: %s", pattern)
+
+    if pattern == "benchmark":
+        metrics = _extract_metrics_from_request(analysis_request)
+        result = det.benchmark_delta(data, pdk_ids, metrics)
+        tool_context.state["_analysis_result"] = {"result": result}
+        return {
+            "formatted_result": _format_result(result, pattern),
+            "message": "분석 완료 (deterministic).",
+        }
+
+    if pattern == "stats":
+        columns = _extract_metrics_from_request(analysis_request)
+        result = det.simple_stats(data, columns)
+        tool_context.state["_analysis_result"] = {"result": result}
+        return {
+            "formatted_result": _format_result(result, pattern),
+            "message": "분석 완료 (deterministic).",
+        }
+
+    if pattern == "groupby":
+        # Extract group columns from request keywords
+        group_cols = [c for c in ["VTH", "CORNER", "TEMP", "VDD", "DS", "WNS", "CH", "CELL"]
+                      if c.lower() in analysis_request.lower()]
+        agg_cols = _extract_metrics_from_request(analysis_request)
+        result = det.groupby_agg(data, group_cols or ["VTH"], agg_cols)
+        tool_context.state["_analysis_result"] = {"result": result}
+        return {
+            "formatted_result": _format_result(result),
+            "message": "분석 완료 (deterministic).",
+        }
+
+    # -----------------------------------------------------------------------
+    # LLM fallback path
+    # -----------------------------------------------------------------------
+    return _analyze_llm(tool_context, data, pdk_ids, analysis_request)
+
+
+def _analyze_llm(
+    tool_context: ToolContext,
+    data: list[dict[str, Any]],
+    pdk_ids: list[int],
+    analysis_request: str,
+) -> dict[str, Any]:
+    """LLM code generation path with one retry on execution failure."""
     columns = list(data[0].keys())
     pdk_counts = {pid: sum(1 for r in data if r["PDK_ID"] == pid) for pid in pdk_ids}
 
+    # Only include columns with >1 unique value (trimmed prompt)
     unique = {}
     for col in ("CELL", "CORNER", "TEMP", "VDD", "VDD_TYPE", "VTH", "DS", "WNS", "CH", "CH_TYPE"):
         vals = sorted({str(r[col]) for r in data if col in r})
-        if vals:
+        if len(vals) > 1:
             unique[col] = vals
-    unique_str = "\n".join(f"  {k}: {v}" for k, v in unique.items())
+    unique_str = "\n".join(f"  {k}: {v}" for k, v in unique.items()) or "  (모든 컬럼 단일 값)"
 
-    preview = json.dumps(data[:3], ensure_ascii=False, default=str, indent=2)
+    preview = json.dumps(data[:2], ensure_ascii=False, default=str, indent=2)
 
     prompt = _CODE_GEN_PROMPT.format(
         analysis_skill=_ANALYSIS_SKILL,
@@ -115,6 +286,38 @@ def analyze(
         analysis_request=analysis_request,
     )
 
+    # First attempt
+    code = _generate_code(prompt)
+    if code is None:
+        return {"error": "코드 생성 실패."}
+
+    exec_result = executor.execute(code, data)
+
+    # Retry once on execution failure
+    if "error" in exec_result:
+        logger.warning("[analyze] first execution failed, retrying with repair prompt")
+        repair_prompt = _REPAIR_PROMPT.format(error=exec_result["error"], original_code=code)
+        code2 = _generate_code(repair_prompt)
+        if code2 is None:
+            return {"error": f"코드 수정 실패. 원래 에러:\n{exec_result['error']}"}
+
+        exec_result = executor.execute(code2, data)
+        if "error" in exec_result:
+            return {"error": f"코드 실행 실패 (retry 후):\n{exec_result['error']}"}
+
+    tool_context.state["_analysis_result"] = exec_result
+
+    raw_result = exec_result.get("result", {})
+    formatted = _format_result(raw_result)
+
+    return {
+        "formatted_result": formatted,
+        "message": "분석 완료 (LLM).",
+    }
+
+
+def _generate_code(prompt: str) -> str | None:
+    """Call LLM to generate analysis code. Returns code string or None."""
     try:
         code = llm.call_llm(
             settings.LLM_MODEL_ANALYZE,
@@ -122,29 +325,13 @@ def analyze(
             temperature=0.0,
             max_tokens=4096,
         )
-
         # Strip markdown code fences if present
         if code.startswith("```"):
             lines = code.split("\n")
             code = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
 
         logger.info("Generated analysis code (%d chars):\n%s", len(code), code)
-
+        return code
     except Exception as e:
         logger.error("LLM code generation failed: %s", e)
-        return {"error": f"코드 생성 실패: {e}"}
-
-    # Execute in sandbox
-    exec_result = executor.execute(code, data)
-
-    if "error" in exec_result:
-        logger.warning("Code execution failed")
-        return {"error": f"코드 실행 실패:\n{exec_result['error']}"}
-
-    # Keep numeric result in session; do not return charts to the LLM
-    tool_context.state["_analysis_result"] = exec_result
-
-    return {
-        "result": exec_result.get("result", {}),
-        "message": "분석 완료.",
-    }
+        return None

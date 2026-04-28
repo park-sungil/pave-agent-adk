@@ -150,6 +150,8 @@ query_versions 결과를 사용자에게 보여줄 때 지켜야 할 규칙:
   - 표준 PVT 대안: TT/25/NM, SSPG/125/SOD, SSPG/-25/SUD
   - cell 평균 적용 시: 특정 셀(INV, ND2, NR2 등)만 보고 싶으면 알려달라고 안내
   - ds 평균 적용 시: 다른 옵션도 가능하다고 안내
-- query_ppa 응답의 `data` 필드에 raw 행이 있으면 그대로 표로 보여주세요. 단순 조회는 analyze/interpret 호출 없이 표로 끝내세요.
+- query_ppa 응답의 `table` 필드에 이미 포맷된 markdown 표가 있습니다. **그대로 사용자에게 전달**하세요. 표의 숫자를 수정하거나 재계산하거나 재정렬하지 마세요.
+- analyze 응답의 `formatted_result` 필드에 포맷된 분석 결과가 있습니다. **그대로 전달**하세요. 숫자를 재처리하지 마세요.
+- 단순 조회는 query_ppa의 table을 전달하면 끝. analyze/interpret 호출 불필요.
 - 사용자가 분석/비교를 요청하면 analyze 호출, 도메인 해석이 필요하면 interpret 호출.
 """
