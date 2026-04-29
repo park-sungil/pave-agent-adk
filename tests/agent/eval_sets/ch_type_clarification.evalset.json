@@ -1,0 +1,32 @@
+{
+  "eval_set_id": "ch_type_clarification",
+  "name": "ch_type 누락 시 되묻기",
+  "description": "사용자가 PPA 요청 시 ch_type을 명시하지 않으면 orchestrator는 query_ppa를 호출하기 전에 HD/HP/uHD를 사용자에게 물어봐야 한다 (prompts.py:48 규칙).",
+  "eval_cases": [
+    {
+      "eval_id": "ask_for_ch_type_when_missing",
+      "session_input": {
+        "app_name": "pave_agent",
+        "user_id": "test_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv_0",
+          "user_content": {
+            "parts": [{"text": "881번 PDK PPA 보여줘"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "어떤 cell height type으로 보여드릴까요? HD, HP, uHD 중 선택해주세요."}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}
