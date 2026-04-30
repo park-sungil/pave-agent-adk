@@ -220,6 +220,26 @@ def load_default_wns_config(state: dict[str, Any]) -> dict[str, dict[str, str]]:
 _HIDDEN_VERSION_COLUMNS = {"PDK_ID", "CREATED_AT", "CREATED_BY"}
 
 
+def _version_match(stored: Any, user: str) -> bool:
+    """Match a stored tool-version string against a user-provided one.
+
+    User's short form (e.g. "v1.0") is treated as zero-padded ("v1.0.0.0").
+    So "v1.0" matches "V1.0.0.0" but NOT "V1.0.5.0" or "V1.1.0.0".
+    Comparison is case-insensitive and tolerates a leading 'v'.
+    """
+    if stored is None:
+        return False
+    stored_parts = str(stored).lower().lstrip("v").split(".")
+    user_parts = str(user).lower().lstrip("v").split(".")
+    if len(user_parts) > len(stored_parts):
+        return False
+    # User-given components must match exactly
+    if stored_parts[: len(user_parts)] != user_parts:
+        return False
+    # Any extra stored components must all be "0"
+    return all(p == "0" for p in stored_parts[len(user_parts):])
+
+
 def query_versions(
     tool_context: ToolContext,
     project: str | None = None,
@@ -270,15 +290,15 @@ def query_versions(
         all_rows = load_versions(tool_context.state)
         filtered = _filter_rows(all_rows, filters)
 
-        # Tool-version filters (HSPICE/LVS/PEX) — prefix match (case-insensitive,
-        # strip leading 'v'). Allows "v1.0" to match "V1.0.0.0".
+        # Tool-version filters (HSPICE/LVS/PEX) — component-aware match
+        # (case-insensitive, leading 'v' stripped). User's short form is
+        # zero-padded to stored length, then exact-compared.
+        # e.g.  "v1.0" matches "V1.0.0.0" but not "V1.0.5.0" or "V1.1.0.0".
         for col, user_val in (("HSPICE", hspice), ("LVS", lvs), ("PEX", pex)):
             if user_val is None:
                 continue
-            user_norm = str(user_val).lower().lstrip("v")
             filtered = [
-                r for r in filtered
-                if str(r.get(col, "")).lower().lstrip("v").startswith(user_norm)
+                r for r in filtered if _version_match(r.get(col, ""), user_val)
             ]
 
         # Node filter: restrict to processes belonging to the node
