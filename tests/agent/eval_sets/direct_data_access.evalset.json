@@ -30,7 +30,7 @@
               },
               {
                 "name": "query_ppa",
-                "args": {"pdk_id": 881, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP"},
+                "args": {"pdk_id": 881, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP", "metrics": ["FREQ_GHZ"]},
                 "id": "call_2"
               }
             ],

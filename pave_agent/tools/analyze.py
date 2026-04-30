@@ -190,6 +190,7 @@ def analyze(
     tool_context: ToolContext,
     pdk_ids: list[int],
     analysis_request: str,
+    baseline_pdk_id: int | None = None,
 ) -> dict[str, Any]:
     """세션에 저장된 PPA 데이터를 분석하고 수치 결과를 반환한다.
 
@@ -200,11 +201,14 @@ def analyze(
         tool_context: ADK tool context (session state).
         pdk_ids: 분석할 PDK ID 목록.
         analysis_request: 분석 요청 설명.
+        baseline_pdk_id: 비교 시 베이스라인 PDK (예: "3nm 대비 2nm" → 3nm 의 pdk_id).
+            지정 시 delta/pct 의 분모 = 베이스라인 PDK 값. 미지정이면 pdk_ids 의 첫 번째.
 
     Returns:
         {"formatted_result": str, "message": str}.
     """
-    logger.info("[analyze] pdk_ids=%s, analysis_request=%s", pdk_ids, analysis_request)
+    logger.info("[analyze] pdk_ids=%s, analysis_request=%s, baseline_pdk_id=%s",
+                pdk_ids, analysis_request, baseline_pdk_id)
 
     if isinstance(pdk_ids, (int, float)):
         pdk_ids = [int(pdk_ids)]
@@ -222,7 +226,7 @@ def analyze(
 
     if pattern == "benchmark":
         metrics = _extract_metrics_from_request(analysis_request)
-        result = det.benchmark_delta(data, pdk_ids, metrics)
+        result = det.benchmark_delta(data, pdk_ids, metrics, baseline_pdk_id=baseline_pdk_id)
         tool_context.state["_analysis_result"] = {"result": result}
         return {
             "formatted_result": _format_result(result, pattern),

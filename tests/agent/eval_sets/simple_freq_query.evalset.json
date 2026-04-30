@@ -25,7 +25,7 @@
             "tool_uses": [
               {
                 "name": "query_ppa",
-                "args": {"pdk_id": 881, "cell": "INV", "ch_type": "HP"},
+                "args": {"pdk_id": 881, "cell": "INV", "ch_type": "HP", "metrics": ["FREQ_GHZ"]},
                 "id": "call_1"
               }
             ],

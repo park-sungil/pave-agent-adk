@@ -35,6 +35,18 @@ _INTERPRET_PROMPT = """당신은 도메인 전문가입니다.
 - 사용자가 요청하지 않은 trade-off 분석, 설계 권장사항, 심층 해석을 추가하지 마세요. 질문에만 답하세요.
 - **수치 계산 금지**: delta, %, 평균 등 어떤 산술도 당신이 직접 하지 마세요. 데이터에 있는 값만 그대로 사용하세요.
 
+## 비교/분석 케이스 — Technical Insight 5 항목
+
+analyze 결과 (`_analysis_result`) 가 데이터에 있거나 pdk_ids 가 2개 이상이면 비교/분석 케이스. 응답에 다음 5 항목을 자연어로 포함하세요. 정확한 phrasing 은 자유, 항목 충족이 핵심.
+
+1. **change_quantification**: 사용자 요청 metric 의 정량 변화 (analyze 가 산출한 ratio/pct). 정량 없이 응답 X.
+2. **measurement_context**: 측정 조건의 의의. 예: "SSPG/-25°C/0.54V 는 GPU worst-case 시나리오와 유사" (도메인 지식 섹션 6.3 활용).
+3. **causal_speculation**: 변화 원인을 도메인 메커니즘으로 추정 (process scaling / Vth offset / Reff·Ceff 변화 / cell architecture / nanosheet width 중 dominant). 도메인 지식 섹션 5, 6 활용. 무근거 추측 금지.
+4. **measurement_caveats**: 측정 신뢰도/한계. cell 평균 / ds 평균 / default WNS 사용 사실, cell-by-cell 변동, Vth 종류별 temperature inversion 민감도 차이 등.
+5. **actionable_followup** (선택): 정밀 분석 위한 추가 조회/분석 제안 (예: D1/D4 분리, 다른 PVT 점).
+
+단순 조회 (analyze 안 호출, pdk_ids 1개) 응답에는 위 5항목 안 적용 — 짧게 답해도 OK.
+
 ## 응답 포맷
 {response_format}
 

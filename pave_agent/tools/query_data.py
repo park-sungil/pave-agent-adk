@@ -74,11 +74,16 @@ _METRIC_PRECISION = {
 }
 
 
-def _format_table(rows: list[dict[str, Any]]) -> str:
+def _format_table(
+    rows: list[dict[str, Any]],
+    metrics: list[str] | None = None,
+) -> str:
     """Format filtered rows as a markdown table for orchestrator to relay.
 
     - Skips columns where all rows have the same value (constant columns)
     - Rounds numeric metrics to sensible precision
+    - When `metrics` is given, only those metric columns appear (focus
+      principle — user requested specific metric(s), code filters columns)
     - Returns ready-to-display markdown string
     """
     if not rows:
@@ -93,9 +98,21 @@ def _format_table(rows: list[dict[str, Any]]) -> str:
         if len(vals) > 1:
             varying_cols.append(col)
 
-    # Always include metric columns even if constant (user wants to see values)
-    for col in _METRIC_COLUMNS:
-        if col in all_cols and col not in varying_cols:
+    # Determine which metric columns to include
+    if metrics is not None:
+        # User specified metrics → only include those (and only if present in data)
+        metric_cols_to_include = [m for m in metrics if m in all_cols]
+    else:
+        metric_cols_to_include = [m for m in _METRIC_COLUMNS if m in all_cols]
+
+    # Drop any varying columns that are NOT-requested metric columns
+    if metrics is not None:
+        unwanted_metrics = set(_METRIC_COLUMNS) - set(metric_cols_to_include)
+        varying_cols = [c for c in varying_cols if c not in unwanted_metrics]
+
+    # Always include the chosen metric columns even if constant
+    for col in metric_cols_to_include:
+        if col not in varying_cols:
             varying_cols.append(col)
 
     if not varying_cols:
@@ -120,6 +137,20 @@ def _format_table(rows: list[dict[str, Any]]) -> str:
         lines.append("| " + " | ".join(cells) + " |")
 
     return "\n".join(lines)
+
+def _format_search_conditions(conditions: dict[str, Any]) -> str:
+    """Compact single-row markdown table summarising the search conditions.
+
+    `conditions` is an ordered dict — keys appear as columns in the order given.
+    Used to make the actually-applied filter (after defaults) visible to the
+    user without LLM re-formatting.
+    """
+    cols = list(conditions.keys())
+    header = "| " + " | ".join(cols) + " |"
+    sep = "| " + " | ".join("---" for _ in cols) + " |"
+    row = "| " + " | ".join(str(conditions[c]) for c in cols) + " |"
+    return "\n".join([header, sep, row])
+
 
 # Node → list of processes (hardcoded; not in DB)
 _NODE_PROCESSES = {
@@ -196,6 +227,9 @@ def query_versions(
     process: str | None = None,
     mask: str | None = None,
     node: str | None = None,
+    hspice: str | None = None,
+    lvs: str | None = None,
+    pex: str | None = None,
 ) -> dict[str, Any]:
     """PDK 버전 목록을 조회한다.
 
@@ -207,6 +241,9 @@ def query_versions(
         mask: 마스크 버전 (예: EVT0).
         node: 공정 노드. "2nm" → SF2/SF2P/SF2PP, "3nm" → SF3.
             process와 동시 사용 불필요.
+        hspice / lvs / pex: 도구 버전. 사용자가 "v1.0" 같이 짧게 줘도
+            "V1.0.0.0" 같은 저장값과 prefix-match 됨 (대소문자 무시,
+            앞 'v' 제거). 정확한 버전 명시 시 정확 매칭.
 
     Returns:
         {
@@ -226,11 +263,23 @@ def query_versions(
     if mask is not None:
         filters["MASK"] = mask
 
-    logger.info("[query_versions] filters=%s, node=%s", filters, node)
+    logger.info("[query_versions] filters=%s, node=%s, hspice=%s, lvs=%s, pex=%s",
+                filters, node, hspice, lvs, pex)
 
     try:
         all_rows = load_versions(tool_context.state)
         filtered = _filter_rows(all_rows, filters)
+
+        # Tool-version filters (HSPICE/LVS/PEX) — prefix match (case-insensitive,
+        # strip leading 'v'). Allows "v1.0" to match "V1.0.0.0".
+        for col, user_val in (("HSPICE", hspice), ("LVS", lvs), ("PEX", pex)):
+            if user_val is None:
+                continue
+            user_norm = str(user_val).lower().lstrip("v")
+            filtered = [
+                r for r in filtered
+                if str(r.get(col, "")).lower().lstrip("v").startswith(user_norm)
+            ]
 
         # Node filter: restrict to processes belonging to the node
         if node is not None:
@@ -281,11 +330,12 @@ def query_ppa(
     wns: str | None = None,
     ch: str | None = None,
     ch_type: str | None = None,
+    metrics: list[str] | None = None,
 ) -> dict[str, Any]:
     """PPA 측정 데이터를 조회한다. pdk_id 필수, ch 또는 ch_type 필수.
 
     빠진 파라미터에 대해 자동으로 default를 적용:
-    - PVT (corner/temp/vdd_type): TT/25/NM 표준 default. 단일 매칭이면 자동 적용. 모호하면 (예: SSPG만) 에러 반환하여 사용자에게 되묻기.
+    - PVT (corner/temp/vdd_type): TT/25/NM per-axis default.
     - cell: AVG(INV, ND2, NR2) 평균 집계
     - ds: AVG(D1, D4) 평균 집계
     - wns: dependencies의 default_wns (ch_type 기준)
@@ -304,21 +354,26 @@ def query_ppa(
         wns: nanosheet width. 미명시 시 default_wns.
         ch: cell height (예: CH138). ch 또는 ch_type 중 하나 필수.
         ch_type: cell height 타입 (예: HP, HD, uHD). ch 또는 ch_type 중 하나 필수.
+        metrics: 응답 `table` 에 표시할 metric 컬럼 목록 (예: ["FREQ_GHZ"]).
+            None 이면 모든 metric 컬럼 포함. 사용자가 특정 metric 만 요청하면
+            orchestrator 가 이 인자로 컬럼 필터링. raw 계산 데이터는 그대로
+            (세션 캐시에는 모든 컬럼 보존 — analyze/interpret 가 사용).
 
     Returns:
         {
-            "count": int,                    # 결과 행 수
+            "count": int,                          # 결과 행 수
             "pdk_ids": [int],
-            "pdk_info": {...},               # PDK 메타
-            "dependencies": {...},           # PDK 옵션 정보
-            "applied_defaults": {...},       # 적용된 default
-            "data": [...],                   # 실제 행 (50개 이하일 때)
+            "pdk_info": {...},                     # PDK 메타
+            "dependencies": {...},                 # PDK 옵션 정보
+            "applied_defaults": {...},             # 적용된 default
+            "search_conditions_table": str,        # compact key-value markdown 표
+            "table": str,                          # 데이터 markdown 표 (≤50행)
             "message": str
         }
         오류 시: {"error": str, "dependencies": {...}}
     """
-    logger.info("[query_ppa] pdk_id=%s, cell=%s, corner=%s, temp=%s, vdd=%s, vdd_type=%s, vth=%s, ds=%s, wns=%s, ch=%s, ch_type=%s",
-                pdk_id, cell, corner, temp, vdd, vdd_type, vth, ds, wns, ch, ch_type)
+    logger.info("[query_ppa] pdk_id=%s, cell=%s, corner=%s, temp=%s, vdd=%s, vdd_type=%s, vth=%s, ds=%s, wns=%s, ch=%s, ch_type=%s, metrics=%s",
+                pdk_id, cell, corner, temp, vdd, vdd_type, vth, ds, wns, ch, ch_type, metrics)
 
     try:
         # Load full PPA data + version info + dependencies (all cached)
@@ -440,23 +495,42 @@ def query_ppa(
         # Cache filtered result for analyze
         tool_context.state[f"_ppa_filtered_{pdk_id}"] = filtered
 
+        # Build search conditions table (compact key-value, single row)
+        cell_label = cell if cell is not None else _CELL_AVG_LABEL
+        ds_label = ds if ds is not None else _DS_AVG_LABEL
+        wns_label = wns if wns is not None else applied_defaults.get("wns", "auto")
+        search_conditions = {
+            "corner": corner,
+            "temp": str(temp),
+            "vdd": str(vdd) if user_specified_vdd else f"vdd_type={vdd_type}",
+            "vth": vth or "all",
+            "cell": cell_label,
+            "ds": ds_label,
+            "wns": wns_label,
+            "ch_type": ch_type or (ch or "-"),
+        }
+        search_conditions_table = _format_search_conditions(search_conditions)
+
         # Build response
         result: dict[str, Any] = {
             "count": len(filtered),
             "pdk_ids": [pdk_id],
             "dependencies": dependencies,
             "applied_defaults": applied_defaults,
+            "search_conditions_table": search_conditions_table,
         }
         if pdk_info:
             result["pdk_info"] = {k: pdk_info[k] for k in _CANDIDATE_COLUMNS if k in pdk_info}
 
         # Return pre-formatted markdown table (not raw data) so the
         # orchestrator LLM can relay it without touching numbers.
+        # If `metrics` is given, code filters columns to only those metrics
+        # (focus principle, deterministic — LLM never picks columns).
         if len(filtered) == 0:
             result["table"] = "(조회 결과 없음)"
             result["message"] = "조회 결과 없음."
         elif len(filtered) <= _RESULT_ROW_LIMIT:
-            result["table"] = _format_table(filtered)
+            result["table"] = _format_table(filtered, metrics=metrics)
             result["message"] = f"{len(filtered)}건 조회됨."
         else:
             result["message"] = (

@@ -49,17 +49,27 @@ def benchmark_delta(
     data: list[dict[str, Any]],
     pdk_ids: list[int],
     metrics: list[str] | None = None,
+    baseline_pdk_id: int | None = None,
 ) -> dict[str, Any]:
     """Compare two PDKs: merge by same conditions, compute delta and % change.
 
+    `baseline_pdk_id` (optional): if given and present in `pdk_ids`, that
+    PDK is treated as `pdk_a` (baseline). Delta and pct are then expressed
+    as `(target - baseline) / baseline`. If omitted, the first id in
+    `pdk_ids` is the baseline (back-compat).
+
     Returns:
-        {"comparison": [per-row dicts], "summary": {metric: {avg_delta, avg_pct}}}
+        {"comparison": [per-row dicts], "summary": {metric: {avg_delta, avg_pct}}, "pdk_a": baseline, "pdk_b": target, ...}
     """
     if len(pdk_ids) != 2:
         return {"error": "benchmark_delta requires exactly 2 pdk_ids."}
 
     metrics = metrics or _METRIC_COLUMNS
-    pdk_a, pdk_b = pdk_ids
+    if baseline_pdk_id is not None and baseline_pdk_id in pdk_ids:
+        pdk_a = baseline_pdk_id
+        pdk_b = next(p for p in pdk_ids if p != baseline_pdk_id)
+    else:
+        pdk_a, pdk_b = pdk_ids
 
     df = pd.DataFrame(data)
     df_a = df[df["PDK_ID"] == pdk_a].copy()
