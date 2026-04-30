@@ -1,7 +1,7 @@
 {
   "eval_set_id": "node_benchmarking",
   "name": "Node benchmarking — 2개 PDK PPA 비교",
-  "description": "use case #2 (project_usecases.md). 사용자가 두 project (Solomon EVT1 / Vanguard EVT0) 비교 요청. orchestrator 는 각각 query_versions 로 pdk_id 해결 후 query_ppa × 2, 그리고 analyze (deterministic benchmark fast path 가 동작해야 함 — pdk_ids 2개), interpret 호출. 5-6 step tool sequence. final_response 는 placeholder.",
+  "description": "use case #2 — node benchmarking. 전체 spec: docs/usecases/use_case_2_node_benchmarking.md (LOCKED v1, 2026-04-30). 5 rubric (change_quantification / measurement_context / causal_speculation / measurement_caveats / actionable_followup) 도 거기. final_response 는 placeholder — 사내 vLLM 첫 응답 보고 다듬을 것.",
   "eval_cases": [
     {
       "eval_id": "solomon_vs_vanguard_freq",
@@ -35,22 +35,101 @@
               },
               {
                 "name": "query_ppa",
-                "args": {"pdk_id": 881, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP"},
+                "args": {"pdk_id": 881, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP", "metrics": ["FREQ_GHZ"]},
                 "id": "call_3"
               },
               {
                 "name": "query_ppa",
-                "args": {"pdk_id": 914, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP"},
+                "args": {"pdk_id": 914, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP", "metrics": ["FREQ_GHZ"]},
                 "id": "call_4"
               },
               {
                 "name": "analyze",
-                "args": {"pdk_ids": [881, 914], "analysis_request": "FREQ_GHZ 비교"},
+                "args": {"pdk_ids": [881, 914], "analysis_request": "FREQ_GHZ 비교", "baseline_pdk_id": 881},
                 "id": "call_5"
               },
               {
                 "name": "interpret",
-                "args": {"pdk_ids": [881, 914], "question": "Solomon EVT1 과 Vanguard EVT0 의 FREQ 비교 의미"},
+                "args": {"pdk_ids": [881, 914], "question": "Solomon EVT1 vs Vanguard EVT0 의 FREQ 비교 의미"},
+                "id": "call_6"
+              }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "node_2nm_3nm_multi_metric",
+      "session_input": {
+        "app_name": "pave_agent",
+        "user_id": "test_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv_0",
+          "user_content": {
+            "parts": [{"text": "2nm 와 3nm 노드 간의 동일 전압(0.7V) 대비 Freq 향상률과 Iddq 증가율을 비교해줘"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "[PLACEHOLDER — Turn 1 expected: ch_type 누락 → tool 호출 없이 사용자에게 'HD/HP/uHD 중 어떤 cell height type 으로?' 류 질문]"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "tool_responses": []
+          }
+        },
+        {
+          "invocation_id": "inv_1",
+          "user_content": {
+            "parts": [{"text": "HP"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "[PLACEHOLDER — Turn 2 expected: query_versions × 2 후 3nm 자동 선택 (1개), 2nm 여러 개 → 사용자에게 표 + 선택 요청]"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "query_versions", "args": {"node": "3nm"}, "id": "call_1"},
+              {"name": "query_versions", "args": {"node": "2nm"}, "id": "call_2"}
+            ],
+            "tool_responses": []
+          }
+        },
+        {
+          "invocation_id": "inv_2",
+          "user_content": {
+            "parts": [{"text": "Vanguard EVT0 으로"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "[PLACEHOLDER — Turn 3 expected: vth 별 7 행 비교 표 (FREQ_GHZ pct + IDDQ_NA pct), 5 rubric 항목 충족 Technical Insight, applied_defaults 자연어 안내. 응답 7 블록 (use_case_2 spec 참조).]"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "query_ppa",
+                "args": {"pdk_id": 881, "vdd": 0.7, "ch_type": "HP", "metrics": ["FREQ_GHZ", "IDDQ_NA"]},
+                "id": "call_3"
+              },
+              {
+                "name": "query_ppa",
+                "args": {"pdk_id": 914, "vdd": 0.7, "ch_type": "HP", "metrics": ["FREQ_GHZ", "IDDQ_NA"]},
+                "id": "call_4"
+              },
+              {
+                "name": "analyze",
+                "args": {"pdk_ids": [881, 914], "analysis_request": "동일 vdd 0.7V 에서 FREQ_GHZ 향상률 + IDDQ_NA 증가율, vth 별 비교", "baseline_pdk_id": 881},
+                "id": "call_5"
+              },
+              {
+                "name": "interpret",
+                "args": {"pdk_ids": [881, 914], "question": "2nm vs 3nm 의 FREQ 향상률 + IDDQ 증가율 의미. vth 별 패턴 포함"},
                 "id": "call_6"
               }
             ],

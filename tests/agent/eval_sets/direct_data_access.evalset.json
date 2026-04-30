@@ -1,7 +1,7 @@
 {
   "eval_set_id": "direct_data_access",
   "name": "Direct data access — project + mask 으로 PDK 해결 후 PPA 조회",
-  "description": "use case #1 (project_usecases.md). 사용자가 project_name + mask + PVT + vth + ch_type 을 모두 명시. orchestrator 는 query_versions 로 pdk_id 해결 (Solomon EVT1 → 881) 후 query_ppa 호출. mock DB 의 PDK 881 = Solomon EVT1, SSPG/-25°C/0.54V/LVT 데이터 존재. final_response 는 placeholder — 사내 vLLM 첫 응답 보고 다듬을 것.",
+  "description": "use case #1 — direct data access. 전체 spec: docs/usecases/use_case_1_direct_data_access.md (LOCKED v1, 2026-04-30). 이 evalset 은 그 spec 의 happy path. final_response 는 placeholder — 사내 vLLM 첫 응답 보고 다듬을 것.",
   "eval_cases": [
     {
       "eval_id": "solomon_evt1_sspg_lvt",
