@@ -1,0 +1,43 @@
+{
+  "eval_set_id": "ambiguous_pvt",
+  "name": "부분 명시 PVT — 사용자가 corner 만 명시 시 default 자연스럽게 적용",
+  "description": "사용자가 PVT axis 일부만 명시 (corner=SSPG). PVT refactor 후 (per-axis default) 동작: corner=SSPG, temp/vdd_type 은 default 적용 → query_ppa 정상 실행. refactor 전엔 _resolve_pvt 가 모호 에러 반환하던 케이스. 이 케이스가 PVT refactor 의 동작 변경을 검증하는 회귀 가드. final_response 는 placeholder.",
+  "eval_cases": [
+    {
+      "eval_id": "sspg_only_partial_pvt",
+      "session_input": {
+        "app_name": "pave_agent",
+        "user_id": "test_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv_0",
+          "user_content": {
+            "parts": [{"text": "Solomon EVT1 PDK 의 HP type, SSPG corner 데이터 보여줘"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "[PLACEHOLDER — fill from real vLLM response. Expected: SSPG/25°C/NM (default 적용) 결과 표 + applied_defaults 안내 (corner 는 사용자 명시, temp/vdd_type 은 default)]"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "query_versions",
+                "args": {"project_name": "Solomon", "mask": "EVT1"},
+                "id": "call_1"
+              },
+              {
+                "name": "query_ppa",
+                "args": {"pdk_id": 881, "corner": "SSPG", "ch_type": "HP"},
+                "id": "call_2"
+              }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}

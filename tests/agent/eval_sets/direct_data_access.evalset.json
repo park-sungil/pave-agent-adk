@@ -1,0 +1,43 @@
+{
+  "eval_set_id": "direct_data_access",
+  "name": "Direct data access — project + mask 으로 PDK 해결 후 PPA 조회",
+  "description": "use case #1 (project_usecases.md). 사용자가 project_name + mask + PVT + vth + ch_type 을 모두 명시. orchestrator 는 query_versions 로 pdk_id 해결 (Solomon EVT1 → 881) 후 query_ppa 호출. mock DB 의 PDK 881 = Solomon EVT1, SSPG/-25°C/0.54V/LVT 데이터 존재. final_response 는 placeholder — 사내 vLLM 첫 응답 보고 다듬을 것.",
+  "eval_cases": [
+    {
+      "eval_id": "solomon_evt1_sspg_lvt",
+      "session_input": {
+        "app_name": "pave_agent",
+        "user_id": "test_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv_0",
+          "user_content": {
+            "parts": [{"text": "Solomon EVT1 PDK 의 SSPG corner, -25°C, 0.54V, HP type, LVT 주파수가 얼마야?"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "[PLACEHOLDER — fill from real vLLM response. Expected: Solomon EVT1 PDK (PDK_ID=881) SSPG/-25°C/0.54V HP type LVT 의 FREQ_GHZ 값 + applied defaults (cell=AVG(INV,ND2,NR2), ds=AVG(D1,D4), wns=default) 안내]"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "query_versions",
+                "args": {"project_name": "Solomon", "mask": "EVT1"},
+                "id": "call_1"
+              },
+              {
+                "name": "query_ppa",
+                "args": {"pdk_id": 881, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP"},
+                "id": "call_2"
+              }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}

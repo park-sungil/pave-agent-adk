@@ -1,0 +1,38 @@
+{
+  "eval_set_id": "simple_freq_query",
+  "name": "단일 PDK 단일 cell 단일 ch_type FREQ 조회",
+  "description": "사용자가 PDK + cell + ch_type 을 모두 명시한 경우 orchestrator 는 query_ppa 를 1회 호출하고 결과 table 을 그대로 relay 해야 한다 (prompts.py:153 table verbatim 규칙). default 가 적용된 PVT/ds/wns 는 사용자에게 자연어로 안내한다.",
+  "eval_cases": [
+    {
+      "eval_id": "ppa_881_inv_hp",
+      "session_input": {
+        "app_name": "pave_agent",
+        "user_id": "test_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv_0",
+          "user_content": {
+            "parts": [{"text": "881번 PDK 의 INV cell, HP type FREQ 알려줘"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "881번 PDK 의 INV cell HP type FREQ 결과입니다. corner/temp/vdd_type 은 default 인 TT/25/NM, drive strength 는 D1/D4 평균, WNS 는 ch_type 별 default 가 적용되었습니다.\n\n| CORNER | TEMP | VDD_TYPE | VTH | FREQ_GHZ |\n| --- | --- | --- | --- | --- |\n| TT | 25 | NM | LVT | 4.5 |"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "query_ppa",
+                "args": {"pdk_id": 881, "cell": "INV", "ch_type": "HP"},
+                "id": "call_1"
+              }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}

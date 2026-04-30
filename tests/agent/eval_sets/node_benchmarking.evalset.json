@@ -1,0 +1,63 @@
+{
+  "eval_set_id": "node_benchmarking",
+  "name": "Node benchmarking — 2개 PDK PPA 비교",
+  "description": "use case #2 (project_usecases.md). 사용자가 두 project (Solomon EVT1 / Vanguard EVT0) 비교 요청. orchestrator 는 각각 query_versions 로 pdk_id 해결 후 query_ppa × 2, 그리고 analyze (deterministic benchmark fast path 가 동작해야 함 — pdk_ids 2개), interpret 호출. 5-6 step tool sequence. final_response 는 placeholder.",
+  "eval_cases": [
+    {
+      "eval_id": "solomon_vs_vanguard_freq",
+      "session_input": {
+        "app_name": "pave_agent",
+        "user_id": "test_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv_0",
+          "user_content": {
+            "parts": [{"text": "Solomon EVT1 과 Vanguard EVT0 의 HP type, SSPG/-25°C/0.54V, LVT 의 FREQ_GHZ 비교해줘"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "[PLACEHOLDER — fill from real vLLM response. Expected: PDK A vs B Delta 표 + Technical Insight (어느 쪽이 더 빠른가, 변동률 등) + applied defaults 안내]"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "query_versions",
+                "args": {"project_name": "Solomon", "mask": "EVT1"},
+                "id": "call_1"
+              },
+              {
+                "name": "query_versions",
+                "args": {"project_name": "Vanguard", "mask": "EVT0"},
+                "id": "call_2"
+              },
+              {
+                "name": "query_ppa",
+                "args": {"pdk_id": 881, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP"},
+                "id": "call_3"
+              },
+              {
+                "name": "query_ppa",
+                "args": {"pdk_id": 914, "corner": "SSPG", "temp": -25, "vdd": 0.54, "vth": "LVT", "ch_type": "HP"},
+                "id": "call_4"
+              },
+              {
+                "name": "analyze",
+                "args": {"pdk_ids": [881, 914], "analysis_request": "FREQ_GHZ 비교"},
+                "id": "call_5"
+              },
+              {
+                "name": "interpret",
+                "args": {"pdk_ids": [881, 914], "question": "Solomon EVT1 과 Vanguard EVT0 의 FREQ 비교 의미"},
+                "id": "call_6"
+              }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}
