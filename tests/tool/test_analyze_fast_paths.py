@@ -36,7 +36,10 @@ def test_benchmark_two_pdks_no_llm_call(ppa_loaded_state, monkeypatch):
     assert "error" not in result, result
     assert "deterministic" in result.get("message", "")
     assert "### PDK" in result["formatted_result"]
-    assert "Delta" in result["formatted_result"]
+    # New format: ratio-only, transposed (PDK A / PDK B / Ratio rows)
+    assert "PDK A" in result["formatted_result"]
+    assert "Ratio" in result["formatted_result"]
+    assert "Delta" not in result["formatted_result"]
     # 100ms is generous — typical run is <20ms
     assert elapsed < 0.5, f"deterministic fast path took {elapsed:.3f}s"
 

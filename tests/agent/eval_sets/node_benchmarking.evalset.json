@@ -18,7 +18,7 @@
             "role": "user"
           },
           "final_response": {
-            "parts": [{"text": "[PLACEHOLDER — fill from real vLLM response. Expected: PDK A vs B Delta 표 + Technical Insight (어느 쪽이 더 빠른가, 변동률 등) + applied defaults 안내]"}],
+            "parts": [{"text": "[PLACEHOLDER — fill from real vLLM response. Expected: PDK 정보 표 + search_conditions + applied_defaults 안내 + 데이터 테이블 + Ratio 표 (transposed: PDK A/PDK B/Ratio 행, VTH 등 axis 가 컬럼, 절대 delta X) + 5 rubric Technical Insight + 답변 1-2줄.]"}],
             "role": "model"
           },
           "intermediate_data": {
@@ -107,7 +107,7 @@
             "role": "user"
           },
           "final_response": {
-            "parts": [{"text": "[PLACEHOLDER — Turn 3 expected: vth 별 7 행 비교 표 (FREQ_GHZ pct + IDDQ_NA pct), 5 rubric 항목 충족 Technical Insight, applied_defaults 자연어 안내. 응답 7 블록 (use_case_2 spec 참조).]"}],
+            "parts": [{"text": "[PLACEHOLDER — Turn 3 expected: metric 마다 transposed Ratio 표 (FREQ_GHZ 표 + IDDQ_NA 표, 각각 PDK A/PDK B/Ratio 행 + VTH 컬럼 7개), 5 rubric Technical Insight, applied_defaults 자연어 안내. 응답 7 블록 (use_case_2 spec 참조). 절대 delta 표시 X.]"}],
             "role": "model"
           },
           "intermediate_data": {

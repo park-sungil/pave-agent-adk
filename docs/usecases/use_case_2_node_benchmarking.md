@@ -51,7 +51,17 @@
 2. **Search conditions 표** — 코드 산출 (compact key-value, #1 동일 형식)
 3. **applied_defaults 자연어 안내** — orchestrator
 4. **데이터 테이블** — 코드 산출 (양쪽 PDK 의 metric 값 raw)
-5. **Delta / Ratio 표** — analyze 산출 (베이스라인 = 3nm, pct 변화)
+5. **Ratio 표** — analyze 산출. Transposed layout: PDK A / PDK B / Ratio 행, 변하는 axis (VTH 등) 컬럼. **절대 delta 표시 X — pct 만**.
+
+   ```
+   **FREQ_GHZ** (axis: VTH)
+   | | ULVT | SLVT | LVT | MVT | RVT | HVT |
+   | PDK A | 4.72 | 4.39 | 3.77 | 3.44 | 3.07 | 2.70 |
+   | PDK B | 4.51 | 4.16 | 3.60 | 3.28 | 2.91 | 2.59 |
+   | Ratio | -4.43% | -5.41% | -4.57% | -4.61% | -5.08% | -3.98% |
+   ```
+
+   metric 이 여러 개면 metric 마다 한 표씩 (multi-metric 변형 케이스).
 6. **Technical Insight** — interpret 산출 (5 rubric 항목 포함, 아래 참조)
 7. **답변 summary** — orchestrator 가 1줄 요약 ("2nm 가 3nm 대비 +5.2% 빨라짐" 정도)
 
@@ -146,13 +156,19 @@
 
 **응답 구조 변화** (블록 5 와 4 가 multi-row):
 - 블록 4 (데이터 테이블): vth 7행 × (FREQ_3nm / FREQ_2nm / IDDQ_3nm / IDDQ_2nm) — 코드 산출
-- 블록 5 (Delta/Ratio 표): vth 7행 × (FREQ_pct / IDDQ_pct)
+- 블록 5 (Ratio 표): metric 마다 한 표 (transposed layout, axis = VTH).
   ```
-  | VTH | FREQ_GHZ pct | IDDQ_NA pct |
-  |-----|--------------|-------------|
-  | ULVT | +6.5% | +12% |
-  | ...  | ... | ... |
-  | HVT | +3.2% | +45% |
+  **FREQ_GHZ** (axis: VTH)
+  | | ULVT | SLVT | LVT | ... | HVT |
+  | PDK A | ... | ... | ... | ... | ... |
+  | PDK B | ... | ... | ... | ... | ... |
+  | Ratio | +6.5% | +5.8% | +5.0% | ... | +3.2% |
+
+  **IDDQ_NA** (axis: VTH)
+  | | ULVT | SLVT | LVT | ... | HVT |
+  | PDK A | ... |
+  | PDK B | ... |
+  | Ratio | +12% | +18% | +20% | ... | +45% |
   ```
 - 블록 6 (Technical Insight) — 동일 5 rubric 적용. multi-vth 패턴 자체가 추가 통찰 (예: "HVT 의 IDDQ 증가율이 dominant — leakage scaling 이 process scaling 보다 큰 영향")
 - 블록 7 (답변 summary): multi-metric 이라 1줄로 못 하면 2-3 줄 OK

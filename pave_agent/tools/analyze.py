@@ -110,38 +110,87 @@ def _format_result(result: dict[str, Any], pattern: str | None = None) -> str:
     return f"```json\n{json.dumps(result, indent=2, ensure_ascii=False, default=str)}\n```"
 
 
+_AXIS_PRIORITY = ["VTH", "DS", "WNS", "CH", "CELL", "TEMP", "VDD", "CORNER"]
+
+
+def _detect_varying_axis(comparison: list[dict[str, Any]]) -> str | None:
+    """Pick the axis whose values vary across `comparison` rows.
+
+    Prefers VTH (most-common benchmark axis), falling back through DS,
+    WNS, CH, CELL, then PVT axes. Returns None if every axis is constant
+    (single-row comparison).
+    """
+    if not comparison:
+        return None
+    for axis in _AXIS_PRIORITY:
+        vals = {r.get(axis) for r in comparison if axis in r}
+        if len(vals) > 1:
+            return axis
+    return None
+
+
 def _format_benchmark(result: dict[str, Any]) -> str:
-    """Format benchmark delta result as markdown table."""
+    """Format benchmark result as markdown — ratio-only, axis-as-columns.
+
+    For each metric, builds a transposed table:
+        |       | <axis-val-1> | <axis-val-2> | ... |
+        | PDK A |       ...    |       ...    | ... |
+        | PDK B |       ...    |       ...    | ... |
+        | Ratio |     +x.x%    |     -y.y%    | ... |
+
+    Single-row comparison (no axis varies) collapses to a 1-column table.
+    Absolute delta is intentionally omitted — ratio (% change) is the
+    only displayed comparison signal.
+    """
     comparison = result.get("comparison", [])
     summary = result.get("summary", {})
     pdk_a = result.get("pdk_a", "A")
     pdk_b = result.get("pdk_b", "B")
 
-    if not summary:
+    if not summary or not comparison:
         return "매칭된 데이터가 없습니다."
 
-    lines = [f"### PDK {pdk_a} vs {pdk_b} 비교 ({result.get('matched_count', 0)}건 매칭)\n"]
+    axis = _detect_varying_axis(comparison)
+    matched_count = result.get("matched_count", len(comparison))
+    lines = [f"### PDK {pdk_a} vs {pdk_b} 비교 ({matched_count}건 매칭)\n"]
 
-    # Summary table
-    lines.append("| Metric | PDK A 평균 | PDK B 평균 | Delta | Delta(%) |")
-    lines.append("|--------|-----------|-----------|-------|----------|")
+    if axis is not None:
+        col_values = [str(r.get(axis)) for r in comparison]
+    else:
+        col_values = ["value"]
 
-    for metric, stats in summary.items():
-        # Compute A and B averages from comparison
-        a_vals = [r.get(f"{metric}_A") for r in comparison if r.get(f"{metric}_A") is not None]
-        b_vals = [r.get(f"{metric}_B") for r in comparison if r.get(f"{metric}_B") is not None]
-        a_avg = sum(a_vals) / len(a_vals) if a_vals else None
-        b_avg = sum(b_vals) / len(b_vals) if b_vals else None
-        delta = stats.get("avg_delta")
-        pct = stats.get("avg_pct")
+    for metric in summary.keys():
+        lines.append(f"**{metric}** (axis: {axis or 'single'})")
 
-        a_str = f"{a_avg:.4f}" if a_avg is not None else "-"
-        b_str = f"{b_avg:.4f}" if b_avg is not None else "-"
-        d_str = f"{delta:+.4f}" if delta is not None else "-"
-        p_str = f"{pct:+.2f}%" if pct is not None else "-"
-        lines.append(f"| {metric} | {a_str} | {b_str} | {d_str} | {p_str} |")
+        header = "| | " + " | ".join(col_values) + " |"
+        sep = "| " + " | ".join("---" for _ in range(len(col_values) + 1)) + " |"
+        lines.append(header)
+        lines.append(sep)
 
-    return "\n".join(lines)
+        a_cells = [_fmt_value(r.get(f"{metric}_A")) for r in comparison]
+        b_cells = [_fmt_value(r.get(f"{metric}_B")) for r in comparison]
+        ratio_cells = [_fmt_pct(r.get(f"{metric}_pct")) for r in comparison]
+
+        lines.append(f"| PDK A | {' | '.join(a_cells)} |")
+        lines.append(f"| PDK B | {' | '.join(b_cells)} |")
+        lines.append(f"| Ratio | {' | '.join(ratio_cells)} |")
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def _fmt_value(v: Any) -> str:
+    if v is None:
+        return "-"
+    if isinstance(v, (int, float)):
+        return f"{v:.4f}"
+    return str(v)
+
+
+def _fmt_pct(v: Any) -> str:
+    if v is None:
+        return "-"
+    return f"{v:+.2f}%"
 
 
 def _format_stats(result: dict[str, Any]) -> str:
