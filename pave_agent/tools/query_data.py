@@ -49,13 +49,6 @@ _CANDIDATE_COLUMNS = [
     "CREATED_AT", "CREATED_BY",
 ]
 
-# Standard PVT triples (corner, temp, vdd_type)
-_PVT_TRIPLES = [
-    {"corner": "TT", "temp": "25", "vdd_type": "NM"},
-    {"corner": "SSPG", "temp": "125", "vdd_type": "SOD"},
-    {"corner": "SSPG", "temp": "-25", "vdd_type": "SUD"},
-]
-
 # Defaults
 _DEFAULT_CELL_GROUP = ("INV", "ND2", "NR2")
 _DEFAULT_DS_GROUP = ("D1", "D4")
@@ -190,6 +183,12 @@ def load_default_wns_config(state: dict[str, Any]) -> dict[str, dict[str, str]]:
 # Tools
 # ---------------------------------------------------------------------------
 
+# Columns excluded from `data` (internal-only — orchestrator should never
+# show these to the user). pdk_id is still surfaced via pdk_id_by_idx /
+# auto_selected_pdk_id so the orchestrator can call query_ppa.
+_HIDDEN_VERSION_COLUMNS = {"PDK_ID", "CREATED_AT", "CREATED_BY"}
+
+
 def query_versions(
     tool_context: ToolContext,
     project: str | None = None,
@@ -210,7 +209,12 @@ def query_versions(
             process와 동시 사용 불필요.
 
     Returns:
-        {"data": [...], "count": int}
+        {
+            "data": [...],              # 사용자 표시용 (PDK_ID/CREATED_AT/CREATED_BY 제외)
+            "count": int,
+            "pdk_id_by_idx": {idx: pdk_id},   # IDX → pdk_id 매핑 (orchestrator 가 query_ppa 호출 시 사용)
+            "auto_selected_pdk_id": int,       # 결과 1개일 때만 — orchestrator 가 별도 확인 없이 사용
+        }
     """
     filters = {}
     if project is not None:
@@ -238,9 +242,27 @@ def query_versions(
                 }
             filtered = [r for r in filtered if r.get("PROCESS") in processes]
 
-        results = [{"IDX": i, **row} for i, row in enumerate(filtered, 1)]
-        logger.info("[query_versions] returned %d rows", len(results))
-        return {"data": results, "count": len(results)}
+        # Build user-safe display rows + IDX→pdk_id mapping
+        display: list[dict[str, Any]] = []
+        pdk_id_by_idx: dict[int, int] = {}
+        for i, row in enumerate(filtered, 1):
+            display.append({
+                "IDX": i,
+                **{k: v for k, v in row.items() if k not in _HIDDEN_VERSION_COLUMNS},
+            })
+            pdk_id_by_idx[i] = row.get("PDK_ID")
+
+        result: dict[str, Any] = {
+            "data": display,
+            "count": len(display),
+            "pdk_id_by_idx": pdk_id_by_idx,
+        }
+        if len(display) == 1:
+            result["auto_selected_pdk_id"] = pdk_id_by_idx[1]
+
+        logger.info("[query_versions] returned %d rows (auto_selected=%s)",
+                    len(display), result.get("auto_selected_pdk_id"))
+        return result
     except Exception as e:
         logger.error("query_versions failed: %s", e, exc_info=True)
         return {"error": str(e)}
@@ -332,35 +354,31 @@ def query_ppa(
                 "dependencies": dependencies,
             }
 
-        # Resolve PVT
-        pvt, pvt_error = _resolve_pvt(corner, temp, vdd_type)
-        if pvt_error:
-            return {
-                "needs_input": pvt_error,
-                "options": ["TT/25/NM", "SSPG/125/SOD", "SSPG/-25/SUD"],
-                "dependencies": dependencies,
-            }
-
-        # If user provided raw vdd, don't default vdd_type — vdd already
-        # pins the voltage, adding a vdd_type filter would over-constrain.
+        # Resolve PVT — per-axis defaults (T1: TT/25/NM). User-specified
+        # values are kept verbatim; missing axes filled from T1.
+        # If user provided raw vdd, don't default vdd_type (vdd pins voltage,
+        # vdd_type filter would over-constrain).
         user_specified_vdd = vdd is not None
         applied_defaults: dict[str, str] = {}
         if corner is None:
-            applied_defaults["corner"] = pvt["corner"]
+            corner = "TT"
+            applied_defaults["corner"] = corner
         if temp is None:
-            applied_defaults["temp"] = pvt["temp"]
+            temp = "25"
+            applied_defaults["temp"] = str(temp)
         if vdd_type is None and not user_specified_vdd:
-            applied_defaults["vdd_type"] = pvt["vdd_type"]
+            vdd_type = "NM"
+            applied_defaults["vdd_type"] = vdd_type
 
         # Build filter dict
         ppa_filters: dict[str, Any] = {
-            "CORNER": pvt["corner"],
-            "TEMP": pvt["temp"],
+            "CORNER": corner,
+            "TEMP": str(temp),
         }
         if user_specified_vdd:
             ppa_filters["VDD"] = vdd
-        else:
-            ppa_filters["VDD_TYPE"] = pvt["vdd_type"]
+        elif vdd_type is not None:
+            ppa_filters["VDD_TYPE"] = vdd_type
         if vth is not None:
             ppa_filters["VTH"] = vth
         if ch is not None:
@@ -455,53 +473,6 @@ def query_ppa(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-def _resolve_pvt(
-    corner: str | None,
-    temp: float | str | None,
-    vdd_type: str | None,
-) -> tuple[dict[str, str] | None, str | None]:
-    """Resolve user PVT input against standard triples.
-
-    Returns (resolved_dict, error_or_none):
-    - Nothing specified → default T1 (TT/25/NM)
-    - Unique match against standard → that triple
-    - Multiple matches (e.g., 'SSPG' alone) → None + error message
-    - No standard match but user specified explicitly → fill missing axes with T1 defaults
-    """
-    user = {
-        "corner": str(corner) if corner is not None else None,
-        "temp": str(temp) if temp is not None else None,
-        "vdd_type": str(vdd_type).upper() if vdd_type is not None else None,
-    }
-
-    if all(v is None for v in user.values()):
-        return _PVT_TRIPLES[0], None
-
-    matches = [
-        t for t in _PVT_TRIPLES
-        if all(user[k] is None or user[k] == t[k] for k in user)
-    ]
-
-    if len(matches) == 1:
-        return matches[0], None
-
-    if len(matches) > 1:
-        options = ", ".join(
-            f"{t['corner']}/{t['temp']}/{t['vdd_type']}" for t in matches
-        )
-        return None, (
-            f"PVT 조건이 모호합니다. 사용자에게 다음 중 어느 표준 조건을 원하는지 확인해주세요: {options}"
-        )
-
-    # No standard match — fill missing axes with T1 defaults
-    t1 = _PVT_TRIPLES[0]
-    return {
-        "corner": user["corner"] or t1["corner"],
-        "temp": user["temp"] or t1["temp"],
-        "vdd_type": user["vdd_type"] or t1["vdd_type"],
-    }, None
-
 
 def _aggregate_avg(
     rows: list[dict[str, Any]],

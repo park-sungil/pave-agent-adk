@@ -69,10 +69,16 @@ pave_agent/
 
 tests/
 ├── conftest.py               # FakeToolContext, ppa_loaded_state, mock_db 리셋
-├── unit/                     # 순수 함수: _resolve_pvt, select_sections, deterministic_analysis
+├── unit/                     # 순수 함수: select_sections, deterministic_analysis
 ├── tool/                     # 도구 단위: query_ppa, query_versions, analyze fast paths
+├── agent/                    # Phase 2 — adk eval framework (EvalSet JSON)
+│   └── eval_sets/            # ch_type_clarification, simple_freq_query, direct_data_access, node_benchmarking, ambiguous_pvt
 ├── test_analyze.py           # 샌드박스 executor
 └── test_interpret.py         # RAG fallback
+
+docs/                          # 사용자 + 사내 Claude Code 인계용
+├── edd-methodology.md         # EDD 철학 + 의사결정 log + mocking 규칙
+└── phase2-3-roadmap.md        # 사내 환경 다음 단계
 ```
 
 ## LLM 호출 포인트
@@ -95,7 +101,7 @@ LLM 호출은 정확히 3곳이다. 각각 역할이 분리되어 있으며, 프
 ### query_data (tools, 순수 코드)
 
 현재 두 개의 explicit tool로 분리되어 있다:
-- **query_versions**(project, project_name, process, mask, node): PDK 버전 조회. `node="2nm"`/`"3nm"`는 코드에서 SF2/SF2P/SF2PP, SF3로 확장된다.
+- **query_versions**(project, project_name, process, mask, node): PDK 버전 조회. `node="2nm"`/`"3nm"`는 코드에서 SF2/SF2P/SF2PP, SF3로 확장된다. 응답 `data` 는 사용자 표시용 (PDK_ID/CREATED_AT/CREATED_BY 자동 제외). `pdk_id_by_idx` (IDX→pdk_id) 와 `auto_selected_pdk_id` (결과 1개일 때) 를 별도 필드로 제공해서 orchestrator 가 query_ppa 호출 시 사용.
 - **query_ppa**(pdk_id, cell, corner, temp, vdd, vdd_type, vth, ds, wns, ch, ch_type): PPA 데이터 조회. `pdk_id` 필수.
 
 둘 다 LLM 호출 없음, 순수 코드. SQL은 하드코딩(템플릿 파싱 아님). 세션 시작 시 PDK 버전 + default WNS config를 미리 로드해서 캐싱한다.
@@ -114,14 +120,16 @@ LLM 호출은 정확히 3곳이다. 각각 역할이 분리되어 있으며, 프
 
 | 파라미터 | Default | 비고 |
 |---------|---------|------|
-| corner/temp/vdd_type | `TT/25/NM` (T1) | 표준 triple 매칭. 모호(예: SSPG만) → 되묻기. 다른 표준: T2 `SSPG/125/SOD`, T3 `SSPG/-25/SUD` |
+| corner | `TT` | per-axis default. 사용자 명시 (예: SSPG) 면 그대로 유지, 누락 axes 만 채움. |
+| temp | `25` | per-axis default. 사용자 명시값 유지. |
+| vdd_type | `NM` (단, 사용자가 raw vdd 주면 스킵) | per-axis default. 표준 PVT 대안 안내는 프롬프트에서 자연어로. |
 | cell | `AVG(INV, ND2, NR2)` | 평균 집계. CELL 라벨은 `"AVG(INV,ND2,NR2)"` |
 | ds | `AVG(D1, D4)` | 평균 집계 |
 | wns | `(project_name, mask, ch_type)` 별 config | `AT9.PDKPAS_CONFIG_JSON_FAV`에서 로드. config 없으면 최소 WNS로 fallback |
 | ch_type | **필수** | 없으면 `needs_input` 반환 → orchestrator가 사용자에게 HP/HD/uHD 질문 |
 | vth | 전체 반환 | default 없음 |
 
-사용자가 명시한 값은 절대 교정하지 않는다. 표준 triple은 빠진 axes를 채우는 용도지, 사용자가 명시한 값을 덮어쓰지 않는다. 사용자가 `vdd`(숫자)를 명시하면 `vdd_type` default는 스킵한다 (중복 필터 방지).
+사용자가 명시한 값은 절대 교정하지 않는다. 사용자가 `vdd`(숫자)를 명시하면 `vdd_type` default는 스킵한다 (중복 필터 방지). PVT 표준 대안 (T1/T2/T3) 안내는 프롬프트에서 자연어로 처리 (코드는 단순 per-axis default 만).
 
 #### query_ppa 응답 구조
 

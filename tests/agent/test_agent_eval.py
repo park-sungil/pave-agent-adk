@@ -73,6 +73,11 @@ async def test_agent_eval(eval_set_file: Path) -> None:
     eval_set = load_eval_set_from_file(str(eval_set_file), eval_set_file.stem)
     eval_config = get_evaluation_criteria_or_default(str(_CONFIG_PATH))
 
+    # num_runs=2 (ADK default) keeps token usage low (Haiku has a 50K
+    # tokens/min organisation rate limit); threshold=0.5 then means "at
+    # least one of two runs must pass." This catches a consistently broken
+    # orchestrator while tolerating LLM non-determinism. For stricter signal,
+    # raise the trajectory threshold and num_runs together.
     await AgentEvaluator.evaluate_eval_set(
         agent_module="pave_agent.agent",
         eval_set=eval_set,
